@@ -3,16 +3,19 @@
 #
 #  u8hd is a POSIX program (isatty(), fileno(), fseeko()) written in C99
 #  (long long, strtoll()), and it needs iconv(3) for the -e and -s options.
-#  Linux (glibc), FreeBSD and NetBSD already have iconv() in the C library,
-#  so the link rule below tries the plain link first and only reaches for
-#  $(ICONVLIBS) when that fails, which is what Mac OS X needs.  GNU libiconv
-#  installed under its own name can be picked with ICONVCFLAGS and ICONVLIBS.
+#  _XOPEN_SOURCE is what asks for iconv(): it is not in POSIX but in the XSI
+#  extensions, and NetBSD hides the prototype when only _POSIX_C_SOURCE is
+#  defined.  Linux (glibc), FreeBSD and NetBSD already have iconv() in the C
+#  library, so the link rule below tries the plain link first and only
+#  reaches for $(ICONVLIBS) when that fails, which is what Mac OS X needs.
+#  GNU libiconv installed under its own name can be picked with ICONVCFLAGS
+#  and ICONVLIBS.
 #
 
 CC	?= cc
 RM	?= rm -f
 CFLAGS	?= -O2
-CPPFLAGS += -D_POSIX_C_SOURCE=200809L
+CPPFLAGS += -D_XOPEN_SOURCE=700
 WARNFLAGS = -Wall -Wextra -Wstrict-prototypes -Wold-style-definition \
 	    -Wmissing-prototypes -Wmissing-declarations
 PROG	= u8hd

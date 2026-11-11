@@ -16,6 +16,16 @@
 #
 #  Run it with "make test", or by hand: sh ./t_u8hd.sh
 #
+#  It is written for the POSIX sh, because that is what /bin/sh is on the
+#  systems u8hd is meant to build on.  Two things are worth knowing:
+#
+#	oct(printf) escapes build the test data; the hexadecimal \x ones are
+#	not in POSIX, and dash -- the /bin/sh of Debian -- copies them to the
+#	output unparsed, which is how this script came to fail there.
+#
+#	the locale that shows characters is found by asking u8hd itself over
+#	the list of locale -a, since not every system has one named C.UTF-8.
+#
 
 U8HD=./u8hd
 TMP=${TMPDIR:-/tmp}/u8hd.$$.d
@@ -25,20 +35,31 @@ if [ ! -x "$U8HD" ]; then
 	exit 1
 fi
 
-#  the checks that look at characters need a locale that shows them
-if locale -a 2>/dev/null | grep -ixq 'C\.UTF-8'; then
-	LOCALE=C.UTF-8
-elif locale -a 2>/dev/null | grep -ixq 'en_US\.UTF-8\|ja_JP\.UTF-8\|UTF-8'; then
-	LOCALE=en_US.UTF-8
-	locale -a 2>/dev/null | grep -ixq 'ja_JP\.UTF-8' && LOCALE=ja_JP.UTF-8
-else
+mkdir -p "$TMP" || exit 1
+trap 'rm -rf "$TMP"' EXIT
+
+#  The checks that look at characters need a locale whose code set is
+#  UTF-8.  Which one that is differs from system to system -- Linux has
+#  C.UTF-8, the BSDs often only en_US.UTF-8 or ja_JP.UTF-8, and the name is
+#  written "utf8" as well as "UTF-8" -- so the list of `locale -a` is walked
+#  and each candidate is tried.  u8hd itself answers the question: in a
+#  locale that displays UTF-8 a dump of "日本" is the dump that -u forces,
+#  and in one that cannot display it, it is not.
+printf '\346\227\245\346\234\254' > "$TMP/probe"
+env LC_ALL=C $U8HD -u "$TMP/probe" > "$TMP/probe.u" 2>/dev/null
+for loc in $(locale -a 2>/dev/null | grep -i 'utf[-_]8$') C.UTF-8 en_US.UTF-8
+do
+	env LC_ALL=$loc $U8HD "$TMP/probe" > "$TMP/probe.g" 2>/dev/null || continue
+	if cmp -s "$TMP/probe.u" "$TMP/probe.g"; then
+		LOCALE=$loc
+		break
+	fi
+done
+if [ -z "$LOCALE" ]; then
 	echo "# no UTF-8 locale to check with" >&2
 	exit 1
 fi
 export LOCALE
-
-mkdir -p "$TMP" || exit 1
-trap 'rm -rf "$TMP"' EXIT
 
 count=0
 fails=0
@@ -90,7 +111,7 @@ checkit "eight bytes, from the middle of a line" \
 '00000000                           69 6A 6B 6C 6D 6E 6F 70          ijklmnop' \
 	env LC_ALL=$LOCALE $U8HD "$TMP/wide" +8
 
-head -c 48 /dev/zero > "$TMP/zero"
+dd if=/dev/zero of="$TMP/zero" bs=48 count=1 2>/dev/null
 checkit "repeated lines are skipped" \
 '00000000  00 00 00 00 00 00 00 00  00 00 00 00 00 00 00 00  ................
 *
@@ -109,7 +130,7 @@ checkit "octal in byte" \
 #  first line ends with the whole of it and the second leaves two blanks
 #  where its two tail bytes are.
 #
-printf '123456789012345\xe6\x97\xa567890123456789012345\n' > "$TMP/u8"
+printf '123456789012345\346\227\24567890123456789012345\n' > "$TMP/u8"
 checkit "utf-8 across the line" \
 '00000000  31 32 33 34 35 36 37 38  39 30 31 32 33 34 35 E6  123456789012345日
 00000010  97 A5 36 37 38 39 30 31  32 33 34 35 36 37 38 39    67890123456789
@@ -117,20 +138,20 @@ checkit "utf-8 across the line" \
 	env LC_ALL=$LOCALE $U8HD "$TMP/u8"
 
 #  the head of a character that the end of the file leaves alone is a dot
-printf 'abc\xe6\x97' > "$TMP/cut"
+printf 'abc\346\227' > "$TMP/cut"
 checkit "utf-8 cut by the end of the file" \
 '00000000  61 62 63 E6 97                                    abc..' \
 	env LC_ALL=$LOCALE $U8HD "$TMP/cut"
 
 #  bytes that make no character at all
-printf 'a\xff\xfe\x80b' > "$TMP/bad"
+printf 'a\377\376\200b' > "$TMP/bad"
 checkit "no character at all" \
 '00000000  61 FF FE 80 62                                    a...b' \
 	env LC_ALL=$LOCALE $U8HD "$TMP/bad"
 #
 #  3.  the same text in the three code sets gives the same characters
 #
-printf 'Hello, \xe6\x97\xa5\xe6\x9c\xac\xe8\xaa\x9e\xe3\x83\x86\xe3\x82\xb9\xe3\x83\x88\n' \
+printf 'Hello, \346\227\245\346\234\254\350\252\236\343\203\206\343\202\271\343\203\210\n' \
 	> "$TMP/text.u8"
 HAVEEUC=0
 HAVESJIS=0
@@ -182,13 +203,13 @@ fi
 #  a character of one byte only: the half width katakana of Shift-JIS, and
 #  the SS2 pair of EUC-JP
 if [ $HAVESJIS -eq 1 ]; then
-	printf '\xb1\xb2\xb3' > "$TMP/kana.sjis"
+	printf '\261\262\263' > "$TMP/kana.sjis"
 	checkit "shift-jis half width katakana" \
 '00000000  B1 B2 B3                                          ｱｲｳ' \
 		env LC_ALL=$LOCALE $U8HD -s "$TMP/kana.sjis"
 fi
 if [ $HAVEEUC -eq 1 ]; then
-	printf '\x8e\xb1\x8e\xb2\x8e\xb3' > "$TMP/kana.euc"
+	printf '\216\261\216\262\216\263' > "$TMP/kana.euc"
 	checkit "euc-jp half width katakana" \
 '00000000  8E B1 8E B2 8E B3                                 ｱｲｳ' \
 		env LC_ALL=$LOCALE $U8HD -e "$TMP/kana.euc"
@@ -199,7 +220,7 @@ fi
 #
 #  4.  what the locale decides
 #
-printf '\xe6\x97\xa5\xe6\x9c\xac\xe8\xaa\x9e' > "$TMP/3kanji"
+printf '\346\227\245\346\234\254\350\252\236' > "$TMP/3kanji"
 checkit "the C locale shows ASCII only" \
 '00000000  E6 97 A5 E6 9C AC E8 AA  9E                       .........' \
 	env LC_ALL=C $U8HD "$TMP/3kanji"
@@ -213,15 +234,15 @@ checkit "-a keeps the C locale company in a UTF-8 one" \
 	env LC_ALL=$LOCALE $U8HD -a "$TMP/3kanji"
 
 if [ $HAVEEUC -eq 1 ]; then
-	head -c 12 "$TMP/text.euc" | tail -c 6 > "$TMP/h.euc"
+	printf '\306\374\313\334\270\354' > "$TMP/h.euc"
 	checkit "-eu converts EUC-JP in the C locale" \
-'00000000  20 C6 FC CB DC B8                                  日本.' \
+'00000000  C6 FC CB DC B8 EC                                 日本語' \
 		env LC_ALL=C $U8HD -eu "$TMP/h.euc"
 fi
 if [ $HAVESJIS -eq 1 ]; then
-	head -c 12 "$TMP/text.sjis" | tail -c 6 > "$TMP/h.sjis"
+	printf '\223\372\226\173\214\352' > "$TMP/h.sjis"
 	checkit "-su converts Shift-JIS in the C locale" \
-'00000000  20 93 FA 96 7B 8C                                  日本.' \
+'00000000  93 FA 96 7B 8C EA                                 日本語' \
 		env LC_ALL=C $U8HD -su "$TMP/h.sjis"
 fi
 

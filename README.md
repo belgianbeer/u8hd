@@ -108,7 +108,7 @@ Mac OS X では 2 回目のリンクが次のように知らせます（他の O
 
 ```sh
 $ make
-cc -D_POSIX_C_SOURCE=200809L -O2 -Wall -Wextra ... -c u8hd.c
+cc -D_XOPEN_SOURCE=700 -O2 -Wall -Wextra ... -c u8hd.c
 u8hd: iconv(3) is not in libc, linking with -liconv
 ```
 
@@ -125,6 +125,22 @@ man のインストールは 2 か所に置きます。英語版は `$(PREFIX)/m
 日本語版は `$(PREFIX)/man/ja/man1/u8hd.1` です（配布物の中では `u8hd_ja.1` という
 名前ですが、locale の man が見つけるように、インストール時の名前は `u8hd.1` に
 します）。置き場所は `make JAMANSEC=ja_JP install` のように変えられます。
+
+### ポータビリティ
+
+* `t_u8hd.sh` は POSIX の `sh` で動くように書いてあります。テストデータの
+  バイト列は `printf` の 16 進エスケープ（`\xe6`）ではなく 8 進エスケープ
+  （`\346`）で組み立てます。16 進エスケープは POSIX に無く、Debian の
+  `/bin/sh`（dash）では解釈されずにそのまま出力されてしまい、それが
+  `make test` が通らなかった原因でした。macOS 上の dash・bash・ksh で
+  21 検査すべてが通ることを確かめてあります。
+* 文字を見る検査に使うロケールは `locale -a` を歩いて、UTF-8 を名前に含むもの
+  から順に実際に u8hd を走らせて選べば、`C.UTF-8` という名前のロケールの無い
+  システムでも通ります。
+* ビルドは `-D_XOPEN_SOURCE=700` としました。iconv(3) は POSIX ではなく XSI
+  の関数で、`_POSIX_C_SOURCE` だけを定義すると NetBSD ではその宣言が隠れて
+  しまうためです。
+* リンクは上に書いたとおり `-liconv` を付けない方を先に試します。
 
 ### 表示例
 
@@ -204,12 +220,30 @@ on the other systems):
 
 ```sh
 $ make
-cc -D_POSIX_C_SOURCE=200809L -O2 -Wall -Wextra ... -c u8hd.c
+cc -D_XOPEN_SOURCE=700 -O2 -Wall -Wextra ... -c u8hd.c
 u8hd: iconv(3) is not in libc, linking with -liconv
 ```
 
 Point `ICONVCFLAGS` and `ICONVLIBS` at Homebrew's GNU libiconv if you would
 rather use that one.
+
+### Portability
+
+* `t_u8hd.sh` is written for POSIX `sh`.  The bytes of the test data are
+  built with octal (`\346`) rather than hexadecimal (`\xe6`) `printf` escapes:
+  the latter are not in POSIX, and dash -- the shell behind `/bin/sh` on
+  Debian -- copies them to the output unparsed, which is what made
+  `make test` fail there.  All 21 checks pass under dash, bash and ksh on this
+  machine.
+* The locale that the character checks need is looked for by walking
+  `locale -a`, trying every name that says UTF-8, and asking u8hd itself
+  whether the Kanji comes out; a system without a locale named `C.UTF-8` is
+  covered that way.
+* The build defines `_XOPEN_SOURCE=700`.  `iconv()` belongs to XSI rather than
+  to POSIX, and with only `_POSIX_C_SOURCE` defined NetBSD hides its
+  prototype.
+* Linking tries the plain libc first and `$(ICONVLIBS)` after it, as told
+  above.
 
 ### Examples
 
