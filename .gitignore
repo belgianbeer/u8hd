@@ -1,0 +1,7 @@
+u8hd
+*.o
+CVS
+.cvsignore
+fuga*
+hoge*
+test*

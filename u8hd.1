@@ -1,0 +1,124 @@
+.TH U8HD 1 "2026-11-10"
+.SH NAME
+u8hd \- hexadecimal, octal, ascii and UTF-8 Japanese dump
+.SH SYNOPSIS
+u8hd [\ \fB-abceOrsuv\fR\ ] [\ \fIfile\fR\ ] [\ \fB+[x|o]offset[k]\fR\ ]
+.SH DESCRIPTION
+u8hd dumps a file in the very same layout that jhd(1), the Japanese hex
+dump tool, has always used, but its character column is built for UTF-8.
+.PP
+u8hd was written because the format of od(1) is hard to read (to its
+author); it is jhd(1) with UTF-8 put in its place.  Started without
+options, it prints for every line of a dump the offset in the file in
+8 hexadecimal digits, 16 bytes of data in 2 hexadecimal digits apiece, and
+the same data as characters to the right of that.  Where the data holds
+multi byte characters, the character column shows the characters
+themselves.  Data that repeats a line already dumped is skipped.
+.PP
+When no file is named and the standard input is a keyboard, the usage
+message is printed.
+.PP
+jhd looked at the environment variable TTYPE to learn which Kanji code the
+terminal spoke.  u8hd asks the locale instead, and does not look at TTYPE
+at all.
+.TP
+a UTF-8 locale
+When the code set of the locale that LC_ALL, LC_CTYPE or LANG names is
+UTF-8, the character column shows the UTF-8 characters of the file as they
+are.  A character that the end of a dump line cuts in two is drawn whole
+at the end of the line it begins in, and the line below leaves as many
+blanks in front of its own characters as bytes that character took; jhd
+handled the trailing half of a Kanji the same way, except that a Kanji was
+two bytes and a UTF-8 character is up to four.
+.TP
+any other locale
+A locale that cannot display UTF-8, the C locale above all, leaves the
+character column at ASCII and shows every byte of 0x80 or above as a dot,
+which is the display jhd gives when TTYPE is not set.  \-u asks for UTF-8
+whatever the locale says.
+.SH OPTIONS
+.TP
+\-a
+Display ASCII characters only, taking that over what the locale said.
+.TP
+\-b
+Dump the data byte by byte in octal.
+.TP
+\-c
+Dump the characters only, 64 bytes to a line.
+.TP
+\-e
+Read the file as EUC-JP.  A Kanji is two bytes, a half width katakana is
+SS2 (0x8E) with one byte after it and JIS X 0212 is SS3 (0x8F) with two;
+the characters are converted to UTF-8 for the display.
+.TP
+\-o
+Dump the data word by word in octal.  The byte order is that of a 68000,
+whatever the machine u8hd runs on.
+.TP
+\-r
+Dump the data word by word in octal, with the byte order of an 8086.
+.TP
+\-s
+Read the file as Shift-JIS.  A Kanji is two bytes and a half width
+katakana is one; the characters are converted to UTF-8 for the display.
+.TP
+\-u
+Display UTF-8 whatever the locale says.
+.TP
+\-v
+Do not skip data that repeats.
+.TP
+\-O
+Show the addresses in octal.
+.PP
+Options may be written behind one dash, so that \fB-eu\fR is the same as
+\fB-e\ -u\fR, and of two options that speak about the same thing the one
+written last wins: \fB-au\fR shows characters, \fB-ua\fR shows ASCII only.
+\fB-e\fR and \fB-s\fR cannot be used together, since one byte of a file
+cannot belong to two code sets at once.
+.PP
+Given as \fB-eu\fR, the file is read as EUC-JP and UTF-8 is written no
+matter what the locale is; \fB-su\fR does the same for Shift-JIS.  With
+\fB-e\fR or \fB-s\fR alone, the output still follows the locale, so in the
+C locale a Kanji comes out as a pair of dots: add \fB-u\fR.
+.SH OFFSET
+An offset is written \[aq]+number\[aq], in decimal, and says where in the
+file to begin looking.  An \[aq]x\[aq] before the number makes it
+hexadecimal, an \[aq]o\[aq] makes it octal, and so does a leading
+\[aq]0\[aq]; a \[aq]k\[aq] after it multiplies it by 1024.  The offset may
+stand before or after the file name.
+.SH CODE SET CONVERSION
+libiconv(3) does the conversion of EUC-JP and Shift-JIS into UTF-8.  A
+file that already is UTF-8 needs none, and no iconv descriptor is opened
+for it.  Bytes that make no character, and characters that cannot be
+converted, are shown as a dot.
+.SH EXAMPLE
+.in +4n
+.nf
+$ u8hd -e sample
+00000000  48 65 6C 6C 6F 2C 20 C6  FC CB DC B8 EC A5 C6 A5  Hello, 日本語テス
+00000010  B9 A5 C8 0A                                       ト.
+.fi
+.in -4n
+.PP
+The A5 that ends the first line joins the B9 that begins the second to
+make one kana, and the character column of the second line therefore
+begins one byte late.
+.SH EXIT STATUS
+.TP 4n
+0
+The dump was written.
+.TP 4n
+1
+Bad usage, a file that cannot be opened, an offset behind the data, or an
+iconv that does not know the conversion.
+.SH SEE ALSO
+od(1), jhd(1), iconv(3), nl_langinfo(3), setlocale(3)
+.SH AUTHOR
+Masato Minda <minmin@wide.ad.jp>
+.PP
+u8hd is the layout of jhd(1) written out for UTF-8.  Where jhd chooses its
+Kanji code when it is compiled, EUC-JP or Shift-JIS, u8hd chooses it on the
+command line with -e and -s.  A Japanese manual page comes with the
+distribution as u8hd_ja.1.
