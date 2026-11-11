@@ -75,7 +75,7 @@ ASCII のみのデータについては、jhd(1) を実際に走らせて、そ�
 
 | 日付 | バージョン | 備考 |
 |------|-----------|------|
-| 2026-11-10 | v1.0 | jhd を元典に、UTF-8 表示・libiconv 変換版として新規作成 |
+| 2026-11-11 | v1.0 | jhd を元典に、UTF-8 表示・libiconv 変換版として新規作成 |
 
 - 作者：民田 雅人（Masato Minda）　<minmin@wide.ad.jp>
 
@@ -135,12 +135,26 @@ man のインストールは 2 か所に置きます。英語版は `$(PREFIX)/m
   `make test` が通らなかった原因でした。macOS 上の dash・bash・ksh で
   21 検査すべてが通ることを確かめてあります。
 * 文字を見る検査に使うロケールは `locale -a` を歩いて、UTF-8 を名前に含むもの
-  から順に実際に u8hd を走らせて選べば、`C.UTF-8` という名前のロケールの無い
-  システムでも通ります。
+  から順に実際に u8hd を走らせて確かめ、通るものを選びます。それで
+  `C.UTF-8` という名前のロケールの無いシステムでも通ります。
 * ビルドは `-D_XOPEN_SOURCE=700` としました。iconv(3) は POSIX ではなく XSI
   の関数で、`_POSIX_C_SOURCE` だけを定義すると NetBSD ではその宣言が隠れて
   しまうためです。
+* 同じく NetBSD の話ですが、`iconv()` の入力引数が `char **` ではなく
+  `const char **` と宣言されているため、u8hd 側に警告（非互換のポインタ型。
+  新しい GCC ではエラーになります）が出ていました。入力側のアドレスを
+  `void *` に変えて渡すようにしたので、`char **` の glibc・Mac OS X・
+  FreeBSD でも、`const char **` の NetBSD でも、警告なく通ります。
 * リンクは上に書いたとおり `-liconv` を付けない方を先に試します。
+
+### 動作確認
+
+| システム | 結果 |
+|----------|------|
+| Mac OS X（開発環境） | `make` / `make check` / `make test`（dash・bash・ksh）すべて通過 |
+| Linux（Debian 13、Ubuntu 24.04） | 通過 |
+| FreeBSD 15.1-RELEASE-p6 | 通過 |
+| NetBSD | 通過。上記のポインタ型の警告は修正済み |
 
 ### 表示例
 
@@ -242,8 +256,22 @@ rather use that one.
 * The build defines `_XOPEN_SOURCE=700`.  `iconv()` belongs to XSI rather than
   to POSIX, and with only `_POSIX_C_SOURCE` defined NetBSD hides its
   prototype.
+* NetBSD, on top of that, declares the input of `iconv()` as `const char **`
+  while glibc and the C libraries of Mac OS X and FreeBSD declare it as
+  `char **`.  The address of the input pointer goes through as a `void *`
+  now, which suits both, so the "incompatible pointer type" warning -- an
+  error with a recent GCC -- is gone.
 * Linking tries the plain libc first and `$(ICONVLIBS)` after it, as told
   above.
+
+### Tested on
+
+| system | result |
+|--------|--------|
+| Mac OS X (the machine it is developed on) | `make`, `make check` and `make test` (under dash, bash and ksh) all pass |
+| Linux (Debian 13, Ubuntu 24.04) | passes |
+| FreeBSD 15.1-RELEASE-p6 | passes |
+| NetBSD 9.4 | passes; the pointer warning told about above is fixed |
 
 ### Examples
 

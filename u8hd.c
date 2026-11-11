@@ -1,10 +1,9 @@
 /*
  *  U8hd - UTF-8 Hexdecimal Dump
  *
- *    Written by Masato Minda
- *               minmin@wide.ad.jp
+ *    Written by Masato Minda <minmin@wide.ad.jp>
  *
- *    Created Nov. 10, 2026  Version 1.0
+ *    Created 2026-11-11  Version 1.0
  *
  *  u8hd dumps a file in the very same layout the Japanese hex dump tool
  *  jhd(1) has always used, but the character column of the dump is built
@@ -22,7 +21,7 @@
  */
 /*  not static, so that the id string stays in the image  */
 char rcsid[] =
-	"@(#)$Id: u8hd.c,v 1.0 2026/11/10 15:30:00 minmin Exp $";
+	"@(#)$Id: u8hd.c,v 1.0 2026/11/11 05:20:07 minmin Exp $";
 
 /*
  *  NORETURN - tell the compiler that a function never comes back
@@ -35,7 +34,7 @@ char rcsid[] =
 #define  NORETURN
 #endif
 
-#include  <sys/types.h>		/*  off_t, size_t  */
+#include  <sys/types.h>			/*  off_t, size_t  */
 #include  <ctype.h>
 #include  <errno.h>
 #include  <iconv.h>			/*  the conversion of -e and -s  */
@@ -47,7 +46,7 @@ char rcsid[] =
 #include  <string.h>
 #include  <unistd.h>			/*  isatty(), fileno(), STDIN_FILENO  */
 
-#define  BSIZE      16384		/*  input buffer size  */
+#define  BSIZE       65536		/*  input buffer size  */
 #define  LWIDTH         64		/*  widest dump line, in char mode  */
 #define  MAXSEQ          6		/*  longest character we recognise  */
 #define  MAXUTF         16		/*  room for the UTF-8 of one char  */
@@ -409,8 +408,14 @@ putmb(const unsigned char *p, int len)
 	inleft = (size_t)len;
 	outp = outbuf;
 	outleft = sizeof(outbuf);
+	/*  iconv() takes the input buffer as "char **" in glibc and in the
+	 *  C libraries of Mac OS X and FreeBSD, but as "const char **" on
+	 *  NetBSD, which keeps to the XSI text.  What the argument points
+	 *  at is a pointer into inbuf either way, so its address travels
+	 *  here as a void * and suits every one of those prototypes.
+	 */
 	(void)iconv(Cvt, NULL, NULL, &outp, &outleft);	/*  shift state  */
-	if (iconv(Cvt, &inp, &inleft, &outp, &outleft) == (size_t)-1 ||
+	if (iconv(Cvt, (void *)&inp, &inleft, &outp, &outleft) == (size_t)-1 ||
 	    inleft != 0 || outp == outbuf ||
 	    !utf8disp((unsigned char *)outbuf, (int)(outp - outbuf))) {
 		putchar('.');

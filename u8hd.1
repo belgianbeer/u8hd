@@ -1,4 +1,4 @@
-.TH U8HD 1 "2026-11-10"
+.TH U8HD 1 "2026-11-11"
 .SH NAME
 u8hd \- hexadecimal, octal, ascii and UTF-8 Japanese dump
 .SH SYNOPSIS
@@ -53,11 +53,12 @@ SS2 (0x8E) with one byte after it and JIS X 0212 is SS3 (0x8F) with two;
 the characters are converted to UTF-8 for the display.
 .TP
 \-o
-Dump the data word by word in octal.  The byte order is that of a 68000,
-whatever the machine u8hd runs on.
+Dump the data word by word in octal, in big-endian byte order, whatever the
+machine u8hd runs on.
 .TP
 \-r
-Dump the data word by word in octal, with the byte order of an 8086.
+Dump the data word by word in octal, in little-endian byte order, whatever
+the machine u8hd runs on.
 .TP
 \-s
 Read the file as Shift-JIS.  A Kanji is two bytes and a half width
