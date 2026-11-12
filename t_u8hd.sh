@@ -12,7 +12,8 @@
 #	3.	the same text in UTF-8, in EUC-JP and in Shift-JIS, which has
 #		to give the same character column,
 #	4.	what the locale, -u and -a decide,
-#	5.	the options that cannot go together.
+#	5.	the options that cannot go together,
+#	6.	the character that the end of the file leaves in two.
 #
 #  Run it with "make test", or by hand: sh ./t_u8hd.sh
 #
@@ -265,6 +266,28 @@ if [ $HAVEEUC -eq 1 ] && [ $HAVESJIS -eq 1 ]; then
 		echo "ok $count - -e and -s are not to be mixed"
 	fi
 fi
+
+#
+#  6.  the character that the end of the file leaves in two
+#
+#  If the last byte of the file is the head of a multi byte character, and
+#  that byte falls on the end of a dump line as well -- which is what an
+#  exact multiple of Dwidth does --, there is no next line left to finish
+#  the character on.  jhd up to 3.0 ended its output there without a line
+#  feed and left the last line open; jhd 3.1 fixed that, and u8hd shows a
+#  dot for every byte left over and closes the line the same way.
+#
+if [ $HAVEEUC -eq 1 ]; then
+	printf 'Hello, \244\242\244\244\244\246\244\250\306' > "$TMP/dangle.euc"
+	checkit "an EUC-JP kanji head left by the end of the file" \
+'00000000  48 65 6C 6C 6F 2C 20 A4  A2 A4 A4 A4 A6 A4 A8 C6  Hello, あいうえ.' \
+		env LC_ALL=$LOCALE $U8HD -e "$TMP/dangle.euc"
+fi
+
+printf '12345678901234\346\227' > "$TMP/dangle.u8"
+checkit "two bytes of a UTF-8 character left by the end" \
+'00000000  31 32 33 34 35 36 37 38  39 30 31 32 33 34 E6 97  12345678901234..' \
+	env LC_ALL=$LOCALE $U8HD "$TMP/dangle.u8"
 
 echo "1..$count"
 [ $fails -eq 0 ] || exit 1

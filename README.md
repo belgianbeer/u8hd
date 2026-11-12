@@ -67,10 +67,6 @@ ASCII のみのデータについては、jhd(1) を実際に走らせて、そ�
 | `-k` | 半角カナまで | 半角カナも `-e`/`-s` で表示されます |
 | 1 文字の長さ | 1 バイトか 2 バイト | 1〜4 バイト（UTF-8）、3 バイト（SS3） |
 
-細かい違いを 1 つだけ挙げておきます。ファイルの末尾が行の境で 1 文字の途中に
-なったとき、u8hd は「.」を打って改行で行を閉じます（jhd はそこで改行を出さず、
-行を開いたままにします）。
-
 ### 来歴
 
 | 日付 | バージョン | 備考 |
@@ -93,7 +89,7 @@ ASCII のみのデータについては、jhd(1) を実際に走らせて、そ�
 ```sh
 make                            # → ./u8hd ができます
 make check                      # 構文チェック（-Wall -Wextra 込み）
-make test                       # tap 形式の回帰テスト（21 検査）
+make test                       # tap 形式の回帰テスト（23 検査）
 sudo make install               # 既定は /usr/local、PREFIX・DESTDIR 変更可
 man -l ./u8hd.1                 # 英語 man（BSD の man なら -l でローカル man を読む）
 man -l ./u8hd_ja.1              # 日本語 man
@@ -133,7 +129,7 @@ man のインストールは 2 か所に置きます。英語版は `$(PREFIX)/m
   （`\346`）で組み立てます。16 進エスケープは POSIX に無く、Debian の
   `/bin/sh`（dash）では解釈されずにそのまま出力されてしまい、それが
   `make test` が通らなかった原因でした。macOS 上の dash・bash・ksh で
-  21 検査すべてが通ることを確かめてあります。
+  23 検査すべてが通ることを確かめてあります。
 * 文字を見る検査に使うロケールは `locale -a` を歩いて、UTF-8 を名前に含むもの
   から順に実際に u8hd を走らせて確かめ、通るものを選びます。それで
   `C.UTF-8` という名前のロケールの無いシステムでも通ります。
@@ -218,7 +214,7 @@ from the locale.
 ```sh
 make                            # builds ./u8hd
 make check                      # syntax check with -Wall -Wextra
-make test                       # the regression tests (21 checks)
+make test                       # the regression tests (23 checks)
 sudo make install               # default /usr/local; PREFIX and DESTDIR are overridable
 man -l ./u8hd.1                 # the English manual page (BSD man; macOS has no -l)
 man -l ./u8hd_ja.1              # the Japanese manual page
@@ -247,7 +243,7 @@ rather use that one.
   built with octal (`\346`) rather than hexadecimal (`\xe6`) `printf` escapes:
   the latter are not in POSIX, and dash -- the shell behind `/bin/sh` on
   Debian -- copies them to the output unparsed, which is what made
-  `make test` fail there.  All 21 checks pass under dash, bash and ksh on this
+  `make test` fail there.  All 23 checks pass under dash, bash and ksh on this
   machine.
 * The locale that the character checks need is looked for by walking
   `locale -a`, trying every name that says UTF-8, and asking u8hd itself
