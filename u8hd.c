@@ -47,9 +47,12 @@ char rcsid[] =
 #include  <unistd.h>			/*  isatty(), fileno(), STDIN_FILENO  */
 
 #define  BSIZE       65536		/*  input buffer size  */
-#define  LWIDTH         64		/*  widest dump line, in char mode  */
+#define  DWIDTH         16		/*  a dump line, in all modes but -c  */
+#define  LWIDTH         64		/*  a dump line, in char mode  */
+#define  XWIDTH        128		/*  the widest line, the -c one with -w  */
 #define  MAXSEQ          6		/*  longest character we recognise  */
 #define  MAXUTF         16		/*  room for the UTF-8 of one char  */
+#define  GROUP           8		/*  byte between two blanks in a line  */
 
 #define  HEXDMP          0		/*  dump in hexdecimal  */
 #define  CHRDMP          1		/*  dump in charactor  */
@@ -67,17 +70,18 @@ char rcsid[] =
 #define  C_SJIS          3		/*  Shift-JIS  */
 
 static unsigned char	Buf[BSIZE];	/*  input buffer  */
-static unsigned char	Tbuf[LWIDTH];	/*  copy of the last dumped line  */
+static unsigned char	Tbuf[XWIDTH];	/*  copy of the last dumped line  */
 static const unsigned char *Lbuf;	/*  last Dwidth bytes dumped  */
 
 static const char	*Prgnam = "u8hd";
 static off_t		Offset;		/*  dump offset  */
 static off_t		Addr;		/*  current address  */
-static off_t		Dwidth = 16;	/*  dump width in byte  */
+static off_t		Dwidth = DWIDTH;	/*  dump width in byte  */
 static int		Admode;		/*  address display mode  */
 static FILE		*Fp;		/*  file pointer  */
 static int		Mode = HEXDMP;	/*  dump mode  */
 static int		Vflag;		/*  visual option  */
+static int		Wflag;		/*  the double width option  */
 static int		Putast;		/*  '*' display flag  */
 static int		Incode = C_UTF8;	/*  code set of the file  */
 static int		Mbflag;		/*  the display holds UTF-8  */
@@ -102,6 +106,8 @@ static void		putnum(unsigned long long value, int shift, int width);
 static void		putoct(unsigned long long value, int width);
 static void		puthex(unsigned long long value, int width);
 static void		putaddr(void);
+static int		dmpgap(int n, int cols);
+static int		dmplead(int adv, int cols);
 static int		chksame(const unsigned char *cur,
 				    const unsigned char *old, int n);
 static void		dmpmb(const unsigned char *base, int size);
@@ -118,6 +124,7 @@ static void		dmpall(const unsigned char *buf, int size);
 static void		setlast(const unsigned char *ptr);
 static void		dmpmain(void);
 static const char	*setname(const char *path);
+static void		setwidth(void);
 static void		setoption(int opt);
 static void		setkanji(int code, char opt);
 static NORETURN void	usage(void);
@@ -484,6 +491,36 @@ putaddr(void)
 }
 
 /*
+ *  dmpgap - the blanks that follow the data of a hexdecimal dump line
+ *
+ *  The bytes missing up to Dwidth spend three columns each, and so does every
+ *  blank that separates two groups of eight bytes; one column is added for
+ *  the blank in front of the character column.  A line that is full needs
+ *  none of the separators, as the blank of its own stands where the data end.
+ */
+static int
+dmpgap(int n, int cols)
+{
+	if (n >= (int)Dwidth) {
+		return 1;
+	}
+	return ((int)Dwidth - n) * cols
+	    + ((int)Dwidth - 1) / GROUP - n / GROUP + 1;
+}
+
+/*
+ *  dmplead - the blanks in front of the data of a dumped line
+ *
+ *  adv bytes of the line belong to the character that putpartial() has just
+ *  finished, or were skipped by an offset, and are shown as blanks.
+ */
+static int
+dmplead(int adv, int cols)
+{
+	return adv * cols + adv / GROUP;
+}
+
+/*
  *  chksame - check n byte same data
  */
 static int
@@ -581,7 +618,7 @@ octdmp1(const unsigned char *base, int size, int adr)
 	while (size--) {
 		putchar(' ');
 		putoct(*base++, 3);
-		if (++adr == 8) {
+		if (++adr % GROUP == 0 && adr < Dwidth) {
 			putchar(' ');
 		}
 	}
@@ -603,6 +640,9 @@ octdmp2(const unsigned char *base, int size)
 
 /*
  *  hexdmp - dump hexdecimal
+ *
+ *  A blank is put between two groups of eight bytes, but not after the last
+ *  byte of a full line, whose own blank to the character column follows.
  */
 static void
 hexdmp(const unsigned char *base, int size, int adr)
@@ -610,7 +650,7 @@ hexdmp(const unsigned char *base, int size, int adr)
 	while (size--) {
 		putchar(' ');
 		puthex(*base++, 2);
-		if (++adr == 8) {
+		if (++adr % GROUP == 0 && adr < Dwidth) {
 			putchar(' ');
 		}
 	}
@@ -681,9 +721,9 @@ dmpmode(const unsigned char *buf, int size, int adv)
 	buf += adv;
 	switch (Mode) {
 	case HEXDMP:				/*  hex dump with char column  */
-		putspc(adv * 3 + (adv >= 8 ? 1 : 0));
+		putspc(dmplead(adv, 3));
 		hexdmp(buf, size, adv);
-		putspc((int)(Dwidth - n) * 3 + (n < 8 ? 2 : 1) + blanks);
+		putspc(dmpgap(n, 3) + blanks);
 		dmptext(buf + lead, size - lead);
 		break;
 
@@ -698,7 +738,7 @@ dmpmode(const unsigned char *buf, int size, int adv)
 		break;
 
 	case OCTBYT:				/*  octal dump in byte  */
-		putspc(adv * 4 + (adv >= 8 ? 1 : 0));
+		putspc(dmplead(adv, 4));
 		octdmp1(buf, size, adv);
 		break;
 
@@ -750,6 +790,15 @@ dmpall(const unsigned char *buf, int size)
 	int	width = (int)Dwidth;
 
 	if (size < width) {
+		if (size < first) {
+			/*
+			 *  The offset sits past the end of the file, so that
+			 *  nothing of this line is left to show.  The line is
+			 *  dumped empty, as it is for an offset that lands on
+			 *  the end of the file.
+			 */
+			first = size;
+		}
 		dmpmode(buf, size - first, first);
 		dmpnl(LINEEND);
 		Addr += size;
@@ -840,6 +889,23 @@ setname(const char *path)
 }
 
 /*
+ *  setwidth - the length of a dumped line
+ *
+ *  A line is sixteen bytes long, or sixty four in the char mode, and -w
+ *  doubles both of them for a terminal wide enough to hold the line.  The
+ *  width stays a power of two, which linestart() counts on.
+ */
+static void
+setwidth(void)
+{
+	if (Mode == CHRDMP) {
+		Dwidth = Wflag ? 2 * LWIDTH : LWIDTH;
+	} else {
+		Dwidth = Wflag ? 2 * DWIDTH : DWIDTH;
+	}
+}
+
+/*
  *  setoption - apply one option letter of the command line
  */
 static void
@@ -848,22 +914,27 @@ setoption(int opt)
 	switch (opt) {
 	case 'b':
 		Mode = OCTBYT;
-		Dwidth = 16;
+		setwidth();
 		break;
 
 	case 'c':
 		Mode = CHRDMP;
-		Dwidth = LWIDTH;
+		setwidth();
 		break;
 
 	case 'o':
 		Mode = OCTDMP;
-		Dwidth = 16;
+		setwidth();
 		break;
 
 	case 'r':
 		Mode = OCTREV;
-		Dwidth = 16;
+		setwidth();
+		break;
+
+	case 'w':
+		Wflag = 1;		/*  twice as many bytes to a line  */
+		setwidth();
 		break;
 
 	case 'a':
@@ -927,7 +998,7 @@ usage(void)
 {
 	fputs("Usage: ", stderr);
 	fputs(Prgnam, stderr);
-	fputs(" [ -abceOrsuv ] [ <file> ] [ +[x|o]<offset>[k] ]\n", stderr);
+	fputs(" [ -abceOrsuvw ] [ <file> ] [ +[x|o]<offset>[k] ]\n", stderr);
 	exit(EXIT_FAILURE);
 }
 
@@ -1126,9 +1197,3 @@ done:
 	}
 	return 0;
 }
-
-
-
-
-
-

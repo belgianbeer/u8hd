@@ -2,7 +2,7 @@
 .SH NAME
 u8hd \- hexadecimal, octal, ascii and UTF-8 Japanese dump
 .SH SYNOPSIS
-u8hd [\ \fB-abceOrsuv\fR\ ] [\ \fIfile\fR\ ] [\ \fB+[x|o]offset[k]\fR\ ]
+u8hd [\ \fB-abceOrsuvw\fR\ ] [\ \fIfile\fR\ ] [\ \fB+[x|o]offset[k]\fR\ ]
 .SH DESCRIPTION
 u8hd dumps a file in the very same layout that jhd(1), the Japanese hex
 dump tool, has always used, but its character column is built for UTF-8.
@@ -70,6 +70,16 @@ Display UTF-8 whatever the locale says.
 \-v
 Do not skip data that repeats.
 .TP
+\-w
+Double the width of a dumped line: 32 bytes to a line instead of 16,
+and 128 instead of 64 with \fB-c\fR.  The groups of eight bytes are kept
+apart by a blank as before, so that the data of a line stand in four
+columns, and the character column begins at column 111 -- which asks for
+a terminal wider than the eighty columns that were usual when jhd was
+written.  Nothing else changes: the same bytes are dumped, in the same
+order, and a character that the end of a line cuts is still drawn where
+its first byte stands.
+.TP
 \-O
 Show the addresses in octal.
 .PP
@@ -94,6 +104,14 @@ libiconv(3) does the conversion of EUC-JP and Shift-JIS into UTF-8.  A
 file that already is UTF-8 needs none, and no iconv descriptor is opened
 for it.  Bytes that make no character, and characters that cannot be
 converted, are shown as a dot.
+.PP
+A byte below 0x80 is handed over unconverted, which suits every Japanese
+code set but one point of JIS X 0201: that makes 0x5C the yen sign and 0x7E
+the overline, and so jhd showed them on a Japanese terminal, being a program
+that wrote the bytes of the file to that terminal unchanged.  u8hd prints
+0x5C as a backslash \e\& and 0x7E as a tilde ~, because that is the reading
+UTF-8 asks for and because it keeps the display from depending on which way
+the iconv of the system happens to map those two bytes.
 .SH EXAMPLE
 .in +4n
 .nf

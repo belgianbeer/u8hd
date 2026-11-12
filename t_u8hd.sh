@@ -13,7 +13,9 @@
 #		to give the same character column,
 #	4.	what the locale, -u and -a decide,
 #	5.	the options that cannot go together,
-#	6.	the character that the end of the file leaves in two.
+#	6.	the character that the end of the file leaves in two,
+#	7.	-w, which doubles the width of a dumped line,
+#	8.	the two bytes that JIS X 0201 reads the other way.
 #
 #  Run it with "make test", or by hand: sh ./t_u8hd.sh
 #
@@ -288,6 +290,79 @@ printf '12345678901234\346\227' > "$TMP/dangle.u8"
 checkit "two bytes of a UTF-8 character left by the end" \
 '00000000  31 32 33 34 35 36 37 38  39 30 31 32 33 34 E6 97  12345678901234..' \
 	env LC_ALL=$LOCALE $U8HD "$TMP/dangle.u8"
+
+#
+#  7.  -w, the double width
+#
+#  Twice as many bytes to a line: thirty two, or a hundred twenty eight with
+#  -c.  The groups of eight bytes keep the blank that separates them, which
+#  makes four columns of eight in the hexdecimal dump, and the character
+#  column starts at column 111 of the line -- the same place on a line that
+#  is full and on one that is not.
+#
+printf 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789abcd' > "$TMP/wide40"
+checkit "forty bytes of ascii, thirty two to a line" \
+'00000000  41 42 43 44 45 46 47 48  49 4A 4B 4C 4D 4E 4F 50  51 52 53 54 55 56 57 58  59 5A 30 31 32 33 34 35  ABCDEFGHIJKLMNOPQRSTUVWXYZ012345
+00000020  36 37 38 39 61 62 63 64                                                                             6789abcd' \
+	env LC_ALL=C $U8HD -w "$TMP/wide40"
+
+dd if=/dev/zero of="$TMP/zero32" bs=32 count=1 2>/dev/null
+checkit "one full line of zeros" \
+'00000000  00 00 00 00 00 00 00 00  00 00 00 00 00 00 00 00  00 00 00 00 00 00 00 00  00 00 00 00 00 00 00 00  ................................' \
+	env LC_ALL=C $U8HD -w "$TMP/zero32"
+
+dd if=/dev/zero of="$TMP/zero130" bs=130 count=1 2>/dev/null
+checkit "a hundred thirty zeros, in char mode" \
+'00000000  ................................................................................................................................
+00000080  ..' \
+	env LC_ALL=C $U8HD -c -w "$TMP/zero130"
+
+dd if=/dev/zero of="$TMP/zero2240" bs=2240 count=1 2>/dev/null
+checkit "seventy lines the same, thirty two bytes to a line" \
+'00000000  00 00 00 00 00 00 00 00  00 00 00 00 00 00 00 00  00 00 00 00 00 00 00 00  00 00 00 00 00 00 00 00  ................................
+*
+000008BF' \
+	env LC_ALL=C $U8HD -w "$TMP/zero2240"
+
+#  The octal dumps take the width as well; the -b one keeps the blank every
+#  eight bytes, and -o and -r spend six columns on a word and no blank.
+checkit "the -b dump, thirty two bytes to a line" \
+'00000000  101 102 103 104 105 106 107 110  111 112 113 114 115 116 117 120  121 122 123 124 125 126 127 130  131 132 060 061 062 063 064 065
+00000020  066 067 070 071 141 142 143 144 ' \
+	env LC_ALL=C $U8HD -b -w "$TMP/wide40"
+checkit "the -o dump, thirty two bytes to a line" \
+'00000000  040502 041504 042506 043510 044512 045514 046516 047520 050522 051524 052526 053530 054532 030061 031063 032065
+00000020  033067 034071 060542 061544' \
+	env LC_ALL=C $U8HD -o -w "$TMP/wide40"
+
+#  A character may cross the end of a line of thirty two bytes as well; it
+#  is shown where its head stands, and the line below leaves its two bytes
+#  of tail blank.  -u is there to make the check independent of the locale.
+printf '1234567890123456789012345678901\346\227\245' > "$TMP/cross34"
+checkit "a UTF-8 character crossing the end of a wide line" \
+'00000000  31 32 33 34 35 36 37 38  39 30 31 32 33 34 35 36  37 38 39 30 31 32 33 34  35 36 37 38 39 30 31 E6  1234567890123456789012345678901日
+00000020  97 A5                                                                                                 ' \
+	env LC_ALL=C $U8HD -u -w "$TMP/cross34"
+
+#
+#  8.  the two bytes that JIS X 0201 reads the other way
+#
+#  0x5C and 0x7E are the yen sign and the overline of JIS X 0201, which is
+#  what jhd showed on a Japanese terminal, since it handed the bytes of the
+#  file over unchanged.  u8hd writes UTF-8 instead, and there 0x5C and 0x7E
+#  travel as the ASCII they are in every other code set: a backslash and a
+#  tilde.  The reading does not ask the iconv of the system either, which
+#  keeps the dump the same on every platform.
+#
+printf '\250\134\261' > "$TMP/yen.sjis"
+checkit "0x5C of a Shift-JIS file" \
+'00000000  A8 5C B1                                          ｨ\ｱ' \
+	env LC_ALL=C $U8HD -s -u "$TMP/yen.sjis"
+
+printf '\244\242\134\261' > "$TMP/yen.euc"
+checkit "0x5C of a EUC-JP file" \
+'00000000  A4 A2 5C B1                                       あ\.' \
+	env LC_ALL=C $U8HD -e -u "$TMP/yen.euc"
 
 echo "1..$count"
 [ $fails -eq 0 ] || exit 1

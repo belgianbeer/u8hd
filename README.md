@@ -11,7 +11,8 @@
 行の幅、アドレス桁数、16 進表示と文字表示の桁位置、同一行のまとめ表示（`*`）などは jhd のそのままで、
 ASCII のみのデータでは jhd とバイト単位で同一の出力になります。
 
-- 1 行 16 バイト、アドレス 16 進 8 桁（`-O` で 8 進 11 桁）
+- 1 行 16 バイト、アドレス 16 進 8 桁（`-O` で 8 進 11 桁）。`-w` で 1 行の幅を 2 倍に
+  （32 バイト、`-c` なら 128 バイト）
 - 右端の文字列は、ファイル中の文字をそのまま表示
 - 文字が行をまたぐときは、前の行の末尾に文字を置き、次の行はそのバイトぶん空ける
   （jhd が漢字の 2 バイト目を次の行にまたがって表示するのと同じ流儀）
@@ -31,11 +32,12 @@ ASCII のみのデータでは jhd とバイト単位で同一の出力になり
 - `-e` と `-s` は同時に使えません（エラーになります）。
 - `-eu` / `-su` とすると、対象は EUC-JP / Shift-JIS のまま、出力はロケールに関係なく UTF-8 です。
 - jhd が参照していた環境変数 **`TTYPE` は使いません**。端末の性質はロケールから決めます。
+- 0x80 未満のバイトは `-e`/`-s` でも変換しません。つまり 0x5C はバックスラッシュ、0x7E はチルダで出ます。JIS X 0201 ではこの 2 つは円記号とオーバーラインで、日本語端末にそのまま出力していた jhd はそう見せていました。u8hd は UTF-8 出力に合うこちらを選び、システムの iconv の表に左右されません。
 
 ### オプション
 
 ```
-u8hd [ -abceOrsuv ] [ <file> ] [ +[x|o]<offset>[k] ]
+u8hd [ -abceOrsuvw ] [ <file> ] [ +[x|o]<offset>[k] ]
 ```
 
 | | |
@@ -49,6 +51,7 @@ u8hd [ -abceOrsuv ] [ <file> ] [ +[x|o]<offset>[k] ]
 | `-s` | ファイルを Shift-JIS として読む |
 | `-u` | ロケールに関係なく UTF-8 で表示 |
 | `-v` | 同一行のまとめ表示を禁止 |
+| `-w` | 1 行の幅を 2 倍に（32 バイト、`-c` なら 128 バイト） |
 | `-O` | アドレスを 8 進表示 |
 
 ### jhd との違い
@@ -66,6 +69,8 @@ ASCII のみのデータについては、jhd(1) を実際に走らせて、そ�
 | `-j` | 漢字表示を強制 | 不要（`-u` が同じ働き） |
 | `-k` | 半角カナまで | 半角カナも `-e`/`-s` で表示されます |
 | 1 文字の長さ | 1 バイトか 2 バイト | 1〜4 バイト（UTF-8）、3 バイト（SS3） |
+| 1 行の幅 | 16 / 64 バイトで固定 | 同じ、ただし `-w` で 32 / 128 バイト |
+| 0x5C と 0x7E | 端末任せ（JIS X 0201 の円記号・オーバーライン） | `-e`/`-s` でもバックスラッシュ・チルダ |
 
 ### 来歴
 
@@ -89,7 +94,7 @@ ASCII のみのデータについては、jhd(1) を実際に走らせて、そ�
 ```sh
 make                            # → ./u8hd ができます
 make check                      # 構文チェック（-Wall -Wextra 込み）
-make test                       # tap 形式の回帰テスト（23 検査）
+make test                       # tap 形式の回帰テスト（32 検査）
 sudo make install               # 既定は /usr/local、PREFIX・DESTDIR 変更可
 man -l ./u8hd.1                 # 英語 man（BSD の man なら -l でローカル man を読む）
 man -l ./u8hd_ja.1              # 日本語 man
@@ -129,7 +134,7 @@ man のインストールは 2 か所に置きます。英語版は `$(PREFIX)/m
   （`\346`）で組み立てます。16 進エスケープは POSIX に無く、Debian の
   `/bin/sh`（dash）では解釈されずにそのまま出力されてしまい、それが
   `make test` が通らなかった原因でした。macOS 上の dash・bash・ksh で
-  23 検査すべてが通ることを確かめてあります。
+  32 検査すべてが通ることを確かめてあります。
 * 文字を見る検査に使うロケールは `locale -a` を歩いて、UTF-8 を名前に含むもの
   から順に実際に u8hd を走らせて確かめ、通るものを選びます。それで
   `C.UTF-8` という名前のロケールの無いシステムでも通ります。
@@ -187,7 +192,8 @@ column is built for **UTF-8**: multi byte characters found in the file are
 shown as the characters themselves. For data without any byte above 0x80 the
 output is byte for byte what `jhd` prints.
 
-- 16 bytes a line, an 8 digit hexadecimal address (`-O` for 11 octal ones)
+- 16 bytes a line, an 8 digit hexadecimal address (`-O` for 11 octal ones),
+  and `-w` to double the width of a line: 32 bytes, or 128 with `-c`
 - a character that crosses the line boundary is drawn at the end of the line
   it starts in, and the next line leaves that many blanks — the way `jhd`
   carries the trailing half of a Kanji over to the next line
@@ -209,12 +215,19 @@ EUC-JP and Shift-JIS and always write UTF-8. The `TTYPE` environment variable
 that `jhd` looks at is **not** used: what the terminal can display is asked
 from the locale.
 
+A byte below 0x80 travels through `-e` and `-s` unconverted, so 0x5C prints as
+a backslash and 0x7E as a tilde. JIS X 0201 has those two as the yen sign and
+the overline, and that is how `jhd` showed them, its output being the bytes of
+the file handed to a Japanese terminal. `u8hd` keeps the ASCII reading: it is
+what UTF-8 asks for, and it does not depend on which way the `iconv` of the
+system happens to map the two bytes.
+
 ### Building
 
 ```sh
 make                            # builds ./u8hd
 make check                      # syntax check with -Wall -Wextra
-make test                       # the regression tests (23 checks)
+make test                       # the regression tests (32 checks)
 sudo make install               # default /usr/local; PREFIX and DESTDIR are overridable
 man -l ./u8hd.1                 # the English manual page (BSD man; macOS has no -l)
 man -l ./u8hd_ja.1              # the Japanese manual page
@@ -243,7 +256,7 @@ rather use that one.
   built with octal (`\346`) rather than hexadecimal (`\xe6`) `printf` escapes:
   the latter are not in POSIX, and dash -- the shell behind `/bin/sh` on
   Debian -- copies them to the output unparsed, which is what made
-  `make test` fail there.  All 23 checks pass under dash, bash and ksh on this
+  `make test` fail there.  All 32 checks pass under dash, bash and ksh on this
   machine.
 * The locale that the character checks need is looked for by walking
   `locale -a`, trying every name that says UTF-8, and asking u8hd itself
@@ -312,4 +325,3 @@ Masato Minda <minmin@wide.ad.jp>
 ### License
 
 Free software owned by its author. See `LICENSE` (BSD 2-clause).
-
