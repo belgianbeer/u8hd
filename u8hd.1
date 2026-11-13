@@ -1,4 +1,4 @@
-.TH U8HD 1 "2026-11-11"
+.TH U8HD 1 "2026-11-12"
 .SH NAME
 u8hd \- hexadecimal, octal, ascii and UTF-8 Japanese dump
 .SH SYNOPSIS
@@ -104,14 +104,6 @@ libiconv(3) does the conversion of EUC-JP and Shift-JIS into UTF-8.  A
 file that already is UTF-8 needs none, and no iconv descriptor is opened
 for it.  Bytes that make no character, and characters that cannot be
 converted, are shown as a dot.
-.PP
-A byte below 0x80 is handed over unconverted, which suits every Japanese
-code set but one point of JIS X 0201: that makes 0x5C the yen sign and 0x7E
-the overline, and so jhd showed them on a Japanese terminal, being a program
-that wrote the bytes of the file to that terminal unchanged.  u8hd prints
-0x5C as a backslash \e\& and 0x7E as a tilde ~, because that is the reading
-UTF-8 asks for and because it keeps the display from depending on which way
-the iconv of the system happens to map those two bytes.
 .SH EXAMPLE
 .in +4n
 .nf

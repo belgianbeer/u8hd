@@ -345,13 +345,13 @@ checkit "a UTF-8 character crossing the end of a wide line" \
 	env LC_ALL=C $U8HD -u -w "$TMP/cross34"
 
 #
-#  8.  the two bytes that JIS X 0201 reads the other way
+#  8.  the two bytes that ASCII and the Japanese code sets read apart
 #
-#  0x5C and 0x7E are the yen sign and the overline of JIS X 0201, which is
-#  what jhd showed on a Japanese terminal, since it handed the bytes of the
-#  file over unchanged.  u8hd writes UTF-8 instead, and there 0x5C and 0x7E
-#  travel as the ASCII they are in every other code set: a backslash and a
-#  tilde.  The reading does not ask the iconv of the system either, which
+#  JIS X 0201 gives 0x5C to the yen sign and 0x7E to the overline, and a
+#  terminal built for that shows those; other terminals show a backslash and
+#  a tilde, which is what jhd printed as it came.  u8hd writes UTF-8, and a
+#  byte below 0x80 travels as the ASCII it is in every code set: a backslash
+#  and a tilde.  That does not ask the iconv of the system either, which
 #  keeps the dump the same on every platform.
 #
 printf '\250\134\261' > "$TMP/yen.sjis"

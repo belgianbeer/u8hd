@@ -37,9 +37,11 @@ all: $(PROG)
 
 $(PROG): $(OBJS)
 	@if $(CC) $(CFLAGS) $(LDFLAGS) -o $(PROG) $(OBJS) > /dev/null 2>&1; \
-	then	:; \
-	else	echo "$(PROG): iconv(3) is not in libc, linking with $(ICONVLIBS)"; \
+	then \
+		echo $(CC) $(CFLAGS) $(LDFLAGS) -o $(PROG) $(OBJS) ; \
+	else \
 		$(CC) $(CFLAGS) $(LDFLAGS) -o $(PROG) $(OBJS) $(ICONVLIBS); \
+		echo $(CC) $(CFLAGS) $(LDFLAGS) -o $(PROG) $(OBJS) $(ICONVLIBS); \
 	fi
 
 $(OBJS): u8hd.c
