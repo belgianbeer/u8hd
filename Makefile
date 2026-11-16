@@ -40,8 +40,8 @@ $(PROG): $(OBJS)
 	then \
 		echo $(CC) $(CFLAGS) $(LDFLAGS) -o $(PROG) $(OBJS) ; \
 	else \
-		$(CC) $(CFLAGS) $(LDFLAGS) -o $(PROG) $(OBJS) $(ICONVLIBS); \
 		echo $(CC) $(CFLAGS) $(LDFLAGS) -o $(PROG) $(OBJS) $(ICONVLIBS); \
+		$(CC) $(CFLAGS) $(LDFLAGS) -o $(PROG) $(OBJS) $(ICONVLIBS); \
 	fi
 
 $(OBJS): u8hd.c
@@ -54,11 +54,17 @@ check:
 test: $(PROG)
 	sh ./t_u8hd.sh
 
-install: $(PROG)
+install: install-prog install-man
+
+install-prog: $(PROG)
 	install -d $(DESTDIR)$(PREFIX)/bin
 	install -m 755 $(PROG) $(DESTDIR)$(PREFIX)/bin/$(PROG)
+
+install-man:
 	install -d $(DESTDIR)$(MANDIR)/man1
 	install -m 644 u8hd.1 $(DESTDIR)$(MANDIR)/man1/u8hd.1
+
+install-jman:
 	install -d $(DESTDIR)$(MANDIR)/$(JAMANSEC)/man1
 	install -m 644 u8hd_ja.1 $(DESTDIR)$(MANDIR)/$(JAMANSEC)/man1/u8hd.1
 
