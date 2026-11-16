@@ -74,7 +74,8 @@ static unsigned char	Tbuf[XWIDTH];	/*  copy of the last dumped line  */
 static const unsigned char *Lbuf;	/*  last Dwidth bytes dumped  */
 
 static const char	*Prgnam = "u8hd";
-static off_t		Offset;		/*  dump offset  */
+static off_t		Offset;		/*  where the dump begins  */
+static off_t		Stop = -1;	/*  one past the last byte, -1 for the end  */
 static off_t		Addr;		/*  current address  */
 static off_t		Dwidth = DWIDTH;	/*  dump width in byte  */
 static int		Admode;		/*  address display mode  */
@@ -130,9 +131,11 @@ static void		setkanji(int code, char opt);
 static NORETURN void	usage(void);
 static NORETURN void	noconv(const char *name);
 static NORETURN void	toobig(void);
+static NORETURN void	badend(void);
 static NORETURN void	no_open(const char *name);
 static void		skipread(FILE *fp);
 static void		skipfile(FILE *fp);
+static off_t		getnum(const char *p, const char **tail);
 static void		chkofst(const char *p);
 static off_t		linestart(off_t addr);
 static int		parseargs(int argc, char **argv);
@@ -856,9 +859,23 @@ static void
 dmpmain(void)
 {
 	size_t	size;
+	size_t	want;
 
 	Addr = linestart(Offset);
-	while ((size = fread(Buf, 1, sizeof(Buf), Fp)) != 0) {
+	for (;;) {
+		want = sizeof(Buf);
+		if (Stop >= 0) {
+			if (Addr >= Stop) {
+				break;			/*  the range is spent  */
+			}
+			if ((off_t)want > Stop - Addr) {
+				want = (size_t)(Stop - Addr);
+			}
+		}
+		size = fread(Buf, 1, want, Fp);
+		if (size == 0) {
+			break;
+		}
 		dmpall(Buf, (int)size);
 		if (size >= (size_t)Dwidth) {
 			setlast(Buf + size - (size_t)Dwidth);
@@ -998,7 +1015,8 @@ usage(void)
 {
 	fputs("Usage: ", stderr);
 	fputs(Prgnam, stderr);
-	fputs(" [ -abceOrsuvw ] [ <file> ] [ +[x|o]<offset>[k] ]\n", stderr);
+	fputs(" [ -abceOrsuvw ] [ <file> ]\n", stderr);
+	fputs("        [ +[x|o]<start>[k][-<length>[k]|-+[x|o]<end>[k]] ]\n", stderr);
 	exit(EXIT_FAILURE);
 }
 
@@ -1023,6 +1041,17 @@ toobig(void)
 {
 	fputs(Prgnam, stderr);
 	fputs(": Offset too large!\n", stderr);
+	exit(EXIT_FAILURE);
+}
+
+/*
+ *  badend - the end of the range falls behind its start
+ */
+static NORETURN void
+badend(void)
+{
+	fputs(Prgnam, stderr);
+	fputs(": The end of the range is behind its start!\n", stderr);
 	exit(EXIT_FAILURE);
 }
 
@@ -1085,19 +1114,24 @@ linestart(off_t addr)
 }
 
 /*
- *  chkofst - decode "+..." into Offset
+ *  getnum - read a number, and say where it stopped
  *
- *  x/X selects hexdecimal, o/O or a leading 0 selects octal, decimal else;
- *  a trailing k multiplies by 1024.
+ *  x/X in front, or 0x in front, selects hexdecimal; o/O or a leading 0
+ *  selects octal; decimal else.  A trailing k multiplies what came before it
+ *  by 1024.  A field that holds no number at all reads as zero, which is what
+ *  "+-100" needs.
  */
-static void
-chkofst(const char *p)
+static off_t
+getnum(const char *p, const char **tail)
 {
 	char		*end;
 	long long	value;
 	int		basesize = 10;
 
-	if (*p == 'x' || *p == 'X') {
+	if (p[0] == '0' && (p[1] == 'x' || p[1] == 'X')) {
+		basesize = 16;			/*  0x20 is 32, as everywhere  */
+		p += 2;
+	} else if (*p == 'x' || *p == 'X') {
 		basesize = 16;
 		++p;
 	} else if (*p == 'o' || *p == 'O') {
@@ -1108,13 +1142,70 @@ chkofst(const char *p)
 	}
 	errno = 0;
 	value = strtoll(p, &end, basesize);
+	if (end == p) {
+		value = 0;			/*  nothing in front of the dash  */
+	}
 	if (errno == ERANGE || value < 0 || value > LLONG_MAX >> 10) {
 		toobig();
 	}
-	Offset = (off_t)value;
-	if (Offset && (*end == 'K' || *end == 'k')) {
-		Offset <<= 10;
+	if (*end == 'K' || *end == 'k') {
+		value <<= 10;			/*  0k is no bytes at all  */
+		++end;
 	}
+	*tail = end;
+	return (off_t)value;
+}
+
+/*
+ *  chkofst - decode "+..." into Offset and Stop
+ *
+ *  "+start" is the offset u8hd always took: the dump runs from there to the
+ *  end of the file.  A dash behind the number narrows the dump, and the way
+ *  the dash is written says how.  "+start-length" shows length bytes, and
+ *  "+start-+end" shows everything from start to end, that last byte being a
+ *  part of the dump.  Both numbers take the x, the o and the k of start, and
+ *  start itself may be left out, which means the beginning of the file:
+ *  "+-length" and "+-+end".
+ */
+static void
+chkofst(const char *p)
+{
+	const char	*tail;
+	off_t		value;
+	off_t		limit;
+
+	Offset = 0;
+	if (*p != '-') {
+		Offset = getnum(p, &tail);
+	} else {
+		tail = p;
+	}
+	if (*tail == '\0') {
+		return;				/*  the plain offset of old  */
+	}
+	if (*tail != '-') {
+		usage();
+	}
+	if (*++tail == '+') {
+		value = getnum(tail + 1, &tail);	/*  the last byte to show  */
+		if (*tail != '\0') {
+			usage();
+		}
+		if (value < Offset) {
+			badend();		/*  an end behind its start  */
+		}
+		limit = value + 1;
+	} else {
+		value = getnum(tail, &tail);	/*  the bytes to show  */
+		if (*tail != '\0') {
+			usage();
+		}
+		if (Offset > (LLONG_MAX >> 10) - value) {
+			toobig();
+		}
+		limit = Offset + value;
+	}
+	Stop = limit;
 }
 
 /*
@@ -1122,8 +1213,9 @@ chkofst(const char *p)
  *
  *  Options are every argument up to the first one that does not begin
  *  with '-' (a lone "-" means the standard input), and they may be
- *  clustered, as in "-euO".  The offset is "+[x|o]<offset>[k]", and it may
- *  be given either before or after the file name.
+ *  clustered, as in "-euO".  The offset is "+start[k]", with a range behind
+ *  it as "+start[k]-length[k]" or "+start[k]-+end[k]", and it may be given
+ *  either before or after the file name.
  *
  *  Returns the index of the file to dump, or 0 when the standard input has
  *  to be used.  Usage is displayed when there is nothing to dump and the

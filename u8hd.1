@@ -2,7 +2,8 @@
 .SH NAME
 u8hd \- hexadecimal, octal, ascii and UTF-8 Japanese dump
 .SH SYNOPSIS
-u8hd [\ \fB-abceOrsuvw\fR\ ] [\ \fIfile\fR\ ] [\ \fB+[x|o]offset[k]\fR\ ]
+u8hd [\ \fB-abceOrsuvw\fR\ ] [\ \fIfile\fR\ ]
+[\ \fB+offset[k][\-length[k]|\-+end[k]]\fR\ ]
 .SH DESCRIPTION
 u8hd dumps a file in the very same layout that jhd(1), the Japanese hex
 dump tool, has always used, but its character column is built for UTF-8.
@@ -96,9 +97,26 @@ C locale a Kanji comes out as a pair of dots: add \fB-u\fR.
 .SH OFFSET
 An offset is written \[aq]+number\[aq], in decimal, and says where in the
 file to begin looking.  An \[aq]x\[aq] before the number makes it
-hexadecimal, an \[aq]o\[aq] makes it octal, and so does a leading
-\[aq]0\[aq]; a \[aq]k\[aq] after it multiplies it by 1024.  The offset may
-stand before or after the file name.
+hexadecimal, and so does \[aq]0x\[aq] in front of it; an \[aq]o\[aq]
+makes it octal, and so does a leading \[aq]0\[aq].  A \[aq]k\[aq] behind
+the number multiplies it by 1024.  The offset may stand before or after the
+file name.
+.PP
+A dash behind the offset narrows the dump to a range, and what follows the
+dash says how.  A plain number counts the bytes to show; a number with an
+\[aq]+\[aq] in front is the last byte to show, that byte still being a part
+of the dump.  The beginning of the range may be left out, which is the
+beginning of the file.  Both of its numbers take the \[aq]x\[aq], the
+\[aq]o\[aq] and the \[aq]k\[aq] of the offset.
+.in +4n
+.nf
++1000\-20        twenty bytes, beginning at byte 1000
++1000\-+1019     the same twenty, told by their places
++\-+511          the first 512 bytes of the file
++0x40\-0x20      the 32 bytes from 0x40 to 0x5f
++1k\-512         the 512 bytes behind the first kilobyte
+.fi
+.in -4n
 .SH CODE SET CONVERSION
 libiconv(3) does the conversion of EUC-JP and Shift-JIS into UTF-8.  A
 file that already is UTF-8 needs none, and no iconv descriptor is opened
@@ -122,8 +140,8 @@ begins one byte late.
 The dump was written.
 .TP 4n
 1
-Bad usage, a file that cannot be opened, an offset behind the data, or an
-iconv that does not know the conversion.
+Bad usage, a file that cannot be opened, an offset behind the data, an end
+behind its start, or an iconv that does not know the conversion.
 .SH SEE ALSO
 od(1), jhd(1), iconv(3), nl_langinfo(3), setlocale(3)
 .SH AUTHOR

@@ -78,7 +78,7 @@ matter what the locale says.
 ## Options
 
 ```text
-u8hd [ -abceOrsuvw ] [ <file> ] [ +[x|o]<offset>[k] ]
+u8hd [ -abceOrsuvw ] [ <file> ] [ +start[k][-length[k]|-+end[k]] ]
 ```
 
 | | |
@@ -96,10 +96,27 @@ u8hd [ -abceOrsuvw ] [ <file> ] [ +[x|o]<offset>[k] ]
 | `-O` | the address in octal |
 
 Options may follow one dash, so `-eu` is the same as `-e -u`, and of two
-options that speak about the same thing the one written last wins.  An offset
-says where in the file to begin: in decimal, with an `x` in hexadecimal, with
-an `o` or a leading `0` in octal, and with a `k` multiplied by 1024.  It may
-stand before or after the file name.
+options that speak about the same thing the one written last wins.
+
+An argument that begins with `+` says where in the file to begin: in decimal,
+with an `x` — or `0x` — in hexadecimal, with an `o` or a leading `0` in octal,
+and with a `k` multiplied by 1024.  It may stand before or after the file name.
+A dash behind it narrows the dump to a range: `+start-length` shows `length`
+bytes, and `+start-+end` shows everything up to and including the byte at
+`end`.  The start may be left out, which means the beginning of the file.
+
+```text
++1000-20         twenty bytes, from byte 1000
++1000-+1019      the same twenty, told by their places
++-+511           the first 512 bytes of the file
++0x40-0x20       the 32 bytes from 0x40 to 0x5f
++1k-512          the 512 bytes behind the first kilobyte
+```
+
+```sh
+$ u8hd hello +16-+23
+00000010  93 E3 82 93 E3 81 AB E3                           .んに.
+```
 
 ## Differences from jhd
 
@@ -130,7 +147,7 @@ with what `jhd` itself prints.
 - `u8hd.c` — the program, ANSI C / POSIX, using libiconv
 - `u8hd.1` — the manual page in English, `u8hd_ja.1` — the same in Japanese
 - `Makefile` — build and install (`PREFIX`, `DESTDIR`, `JAMANSEC` overridable)
-- `t_u8hd.sh` — 32 regression checks in tap format
+- `t_u8hd.sh` — 39 regression checks in tap format
 - `LICENSE` / `README.md`
 
 ## Building
@@ -138,7 +155,7 @@ with what `jhd` itself prints.
 ```sh
 make                            # builds ./u8hd
 make check                      # a syntax check with -Wall -Wextra
-make test                       # the regression tests (32 checks)
+make test                       # the regression tests (39 checks)
 sudo make install               # into /usr/local; PREFIX and DESTDIR are overridable
 man -l ./u8hd.1                 # the English page (BSD man; macOS has no -l)
 man -l ./u8hd_ja.1              # the Japanese page
@@ -171,7 +188,9 @@ To install the Japanese man pages, you must run `make install-jman` separately.
 
 - `t_u8hd.sh` is written for POSIX `sh`.  The bytes of its test data are built
   with octal (`\346`) rather than hexadecimal (`\xe6`) `printf` escapes: the
-  latter are not in POSIX, and dash. All 32 checks pass under dash, bash and ksh.
+  latter are not in POSIX, and dash — the shell behind `/bin/sh` on Debian —
+  copies them to its output unparsed, which is what made `make test` fail
+  there.  All 39 checks pass under dash, bash and ksh.
 - The locale the character checks need is found by walking `locale -a`,
   trying every name that says UTF-8 and asking `u8hd` itself whether the
   characters come out, so a system without a locale named `C.UTF-8` is
@@ -239,7 +258,7 @@ $ u8hd sample
 ## オプション
 
 ```text
-u8hd [ -abceOrsuvw ] [ <file> ] [ +[x|o]<offset>[k] ]
+u8hd [ -abceOrsuvw ] [ <file> ] [ +start[k][-length[k]|-+end[k]] ]
 ```
 
 | | |
@@ -255,6 +274,26 @@ u8hd [ -abceOrsuvw ] [ <file> ] [ +[x|o]<offset>[k] ]
 | `-v` | 同一行のまとめ表示を禁止 |
 | `-w` | 1 行の幅を 2 倍に (32 バイト、`-c` なら 128 バイト) |
 | `-O` | アドレスを 8 進表示 |
+
+`+` で始まる引数は、ファイルのどこらから見始めるかを指定します。数字は 10 進数で書き、
+前に `x`（または `0x`）をつけるか `o` をつけるか先頭が `0` だとそれれ 16 進・8 進数、
+後に `k` をつけると 1024 倍です。ファイル名の前でも後でも書けます。
+その後にダッシをつけると表示を範囲に絞められます。`+start-length` は start
+バイト目から length バイトを、`+start-+end` は start から end のバイトまで
+（end も含む）を表示します。start は省略でき、それはファイル先頭を意味します。
+
+```text
++1000-20         1000 バイト目から 20 バイト
++1000-+1019      同じ 20 バイトを位置で指定
++-+511           ファイルの先頭から 512 バイト
++0x40-0x20       0x40 から 0x5f までの 32 バイト
++1k-512          先頭の 1K バイトのうしろの 512 バイト
+```
+
+```sh
+$ u8hd hello +16-+23
+00000010  93 E3 82 93 E3 81 AB E3                           .んに.
+```
 
 ## jhd との違い
 
@@ -296,7 +335,7 @@ ASCII のみのデータについては、jhd(1) を実際に走らせて、そ�
 ```sh
 make                            # → ./u8hd ができます
 make check                      # 構文チェック (-Wall -Wextra 込み)
-make test                       # tap 形式の回帰テスト (32 検査)
+make test                       # tap 形式の回帰テスト (39 検査)
 sudo make install               # 既定は /usr/local、PREFIX・DESTDIR 変更可
 man -l ./u8hd.1                 # 英語 man (BSD の man なら -l でローカル man を読む)
 man -l ./u8hd_ja.1              # 日本語 man
@@ -326,15 +365,15 @@ make ICONVCFLAGS="-I$(brew --prefix libiconv)/include" \
 
 としてください。
 
-man のインストールは 2 か所に置きます。英語版は `$(PREFIX)/man/man1/u8hd.1`、
-日本語版は `$(PREFIX)/man/ja/man1/u8hd.1` です (配布物の中では `u8hd_ja.1` という
-名前ですが、locale の man が見つけるように、インストール時の名前は `u8hd.1` に
-します)。置き場所は `make JAMANSEC=ja_JP install` のように変えられます。
-
 インストールは、プログラム本体と英語man、日本語man をそれぞれ独立してインストールできるように
 Makefile を記述してあります。単に `make install`
 を実行した場合、日本語man はインストールされません。日本語man をインストールする場合は、
 別途 `make install-jman` を実行する必要があります。
+
+また man のインストールは 2 か所になります。英語版は `$(PREFIX)/man/man1/u8hd.1`、
+日本語版は `$(PREFIX)/man/ja/man1/u8hd.1` です (配布物の中では `u8hd_ja.1` という
+名前ですが、locale の man が見つけるように、インストール時の名前は `u8hd.1` に
+します)。置き場所は `make JAMANSEC=ja_JP install-jman` のように変えられます。
 
 ## ポータビリティ
 
@@ -342,7 +381,7 @@ Makefile を記述してあります。単に `make install`
   バイト列は `printf` の 16 進エスケープ (`\xe6`)ではなく 8 進エスケープ
    (`\346`)で組み立てます。16 進エスケープは POSIX に無く、Debian の
   `/bin/sh` (dash)等では解釈されずにそのまま出力されてしまいます。
-  macOS 上の dash・bash・ksh で 32 検査すべてが通ることを確かめてあります。
+  macOS 上の dash・bash・ksh で 39 検査すべてが通ることを確かめてあります。
 - 文字を見る検査に使うロケールは `locale -a` を確認し、UTF-8 を名前に含むもの
   から順に実際に u8hd を走らせて確かめ、通るものを選びます。
   `C.UTF-8` という名前のロケールの無いシステムでも通ります。

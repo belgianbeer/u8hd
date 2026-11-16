@@ -15,7 +15,9 @@
 #	5.	the options that cannot go together,
 #	6.	the character that the end of the file leaves in two,
 #	7.	-w, which doubles the width of a dumped line,
-#	8.	the two bytes that JIS X 0201 reads the other way.
+#	8.	the two bytes that ASCII and the Japanese code sets read
+#		apart,
+#	9.	the range: where the dump begins and where it leaves off.
 #
 #  Run it with "make test", or by hand: sh ./t_u8hd.sh
 #
@@ -363,6 +365,52 @@ printf '\244\242\134\261' > "$TMP/yen.euc"
 checkit "0x5C of a EUC-JP file" \
 '00000000  A4 A2 5C B1                                       あ\.' \
 	env LC_ALL=C $U8HD -e -u "$TMP/yen.euc"
+
+#
+#  9.  the range: where the dump begins and where it leaves off
+#
+#  "+start-length" shows length bytes and "+start-+end" shows everything up
+#  to and including the byte at end; leaving start away begins at the top of
+#  the file.  The two ways of writing the same range must print the same
+#  thing, which the checks below compare, and an end behind its start is an
+#  error rather than a silent nothing.
+#
+printf 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ\n\n' > "$TMP/range"
+
+checkit "twenty bytes from the beginning" \
+'00000000  41 42 43 44 45 46 47 48  49 4A 4B 4C 4D 4E 4F 50  ABCDEFGHIJKLMNOP
+00000010  51 52 53 54                                       QRST' \
+	env LC_ALL=C $U8HD +-20 "$TMP/range"
+
+checkit "a range that runs into the end" \
+'00000030                           55 56 57 58 59 5A 0A 0A          UVWXYZ..' \
+	env LC_ALL=C $U8HD +56-16 "$TMP/range"
+
+#  the same bytes, the two ways of asking for them
+$U8HD "$TMP/range" "+-+19" > "$TMP/g9a" 2>/dev/null
+$U8HD "$TMP/range" "+-20" > "$TMP/g9b" 2>/dev/null
+check "+-+19 is the twenty bytes of +-20" "$TMP/g9b" "$TMP/g9a"
+
+$U8HD "$TMP/range" "+32-+47" > "$TMP/g9a" 2>/dev/null
+$U8HD "$TMP/range" "+32-16" > "$TMP/g9b" 2>/dev/null
+check "+32-+47 is the sixteen bytes of +32-16" "$TMP/g9b" "$TMP/g9a"
+
+checkit "sixteen bytes from byte 32" \
+'00000020  36 37 38 39 41 42 43 44  45 46 47 48 49 4A 4B 4C  6789ABCDEFGHIJKL' \
+	env LC_ALL=C $U8HD +32-16 "$TMP/range"
+
+checkit "the char dump, sixty bytes of it" \
+'00000000  ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789ABCDEFGHIJKLMNOPQRSTUVWX' \
+	env LC_ALL=C $U8HD -c "+-60" "$TMP/range"
+
+#  an end behind its start is said out loud
+count=$((count + 1))
+if env LC_ALL=C $U8HD "$TMP/range" "+8-+7" > /dev/null 2>&1; then
+	echo "not ok $count - the end behind the start"
+	fails=$((fails + 1))
+else
+	echo "ok $count - the end behind the start"
+fi
 
 echo "1..$count"
 [ $fails -eq 0 ] || exit 1
