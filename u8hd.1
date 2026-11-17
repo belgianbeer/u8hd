@@ -2,7 +2,7 @@
 .SH NAME
 u8hd \- hexadecimal, octal, ascii and UTF-8 Japanese dump
 .SH SYNOPSIS
-u8hd [\ \fB-abceOrsuvw\fR\ ] [\ \fIfile\fR\ ]
+u8hd [\ \fB-abcehOrsuvw\fR\ ] [\ \fIfile\fR\ ]
 [\ \fB+offset[k][\-length[k]|\-+end[k]]\fR\ ]
 .SH DESCRIPTION
 u8hd dumps a file in the very same layout that jhd(1), the Japanese hex
@@ -52,6 +52,11 @@ Dump the characters only, 64 bytes to a line.
 Read the file as EUC-JP.  A Kanji is two bytes, a half width katakana is
 SS2 (0x8E) with one byte after it and JIS X 0212 is SS3 (0x8F) with two;
 the characters are converted to UTF-8 for the display.
+.TP
+\-h
+Write the help on the standard output: the usage, one line about every
+option, and, last of all, the id string that tells which version this
+is.  No file is read, and the exit status is 0.
 .TP
 \-o
 Dump the data word by word in octal, in big-endian byte order, whatever the

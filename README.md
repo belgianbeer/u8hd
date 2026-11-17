@@ -78,7 +78,7 @@ matter what the locale says.
 ## Options
 
 ```text
-u8hd [ -abceOrsuvw ] [ <file> ] [ +start[k][-length[k]|-+end[k]] ]
+u8hd [ -abcehOrsuvw ] [ <file> ] [ +start[k][-length[k]|-+end[k]] ]
 ```
 
 | | |
@@ -87,6 +87,7 @@ u8hd [ -abceOrsuvw ] [ <file> ] [ +start[k][-length[k]|-+end[k]] ]
 | `-b` | the data as octal bytes |
 | `-c` | the characters only, 64 bytes to a line |
 | `-e` | read the file as EUC-JP |
+| `-h` | show the help, which ends with the version |
 | `-o` | the data as octal words, big-endian |
 | `-r` | the data as octal words, little-endian |
 | `-s` | read the file as Shift-JIS |
@@ -147,7 +148,7 @@ with what `jhd` itself prints.
 - `u8hd.c` — the program, ANSI C / POSIX, using libiconv
 - `u8hd.1` — the manual page in English, `u8hd_ja.1` — the same in Japanese
 - `Makefile` — build and install (`PREFIX`, `DESTDIR`, `JAMANSEC` overridable)
-- `t_u8hd.sh` — 39 regression checks in tap format
+- `t_u8hd.sh` — 43 regression checks in tap format
 - `LICENSE` / `README.md`
 
 ## Building
@@ -155,7 +156,7 @@ with what `jhd` itself prints.
 ```sh
 make                            # builds ./u8hd
 make check                      # a syntax check with -Wall -Wextra
-make test                       # the regression tests (39 checks)
+make test                       # the regression tests (43 checks)
 sudo make install               # into /usr/local; PREFIX and DESTDIR are overridable
 man -l ./u8hd.1                 # the English page (BSD man; macOS has no -l)
 man -l ./u8hd_ja.1              # the Japanese page
@@ -190,7 +191,7 @@ To install the Japanese man pages, you must run `make install-jman` separately.
   with octal (`\346`) rather than hexadecimal (`\xe6`) `printf` escapes: the
   latter are not in POSIX, and dash — the shell behind `/bin/sh` on Debian —
   copies them to its output unparsed, which is what made `make test` fail
-  there.  All 39 checks pass under dash, bash and ksh.
+  there.  All 43 checks pass under dash, bash and ksh.
 - The locale the character checks need is found by walking `locale -a`,
   trying every name that says UTF-8 and asking `u8hd` itself whether the
   characters come out, so a system without a locale named `C.UTF-8` is
@@ -258,7 +259,7 @@ $ u8hd sample
 ## オプション
 
 ```text
-u8hd [ -abceOrsuvw ] [ <file> ] [ +start[k][-length[k]|-+end[k]] ]
+u8hd [ -abcehOrsuvw ] [ <file> ] [ +start[k][-length[k]|-+end[k]] ]
 ```
 
 | | |
@@ -267,6 +268,7 @@ u8hd [ -abceOrsuvw ] [ <file> ] [ +start[k][-length[k]|-+end[k]] ]
 | `-b` | 1 バイトずつ 8 進 |
 | `-c` | 文字のみ 1 行 64 バイト |
 | `-e` | ファイルを EUC-JP として読む |
+| `-h` | ヘルプを表示（最後に版を示す文字列） |
 | `-o` | 2 バイトずつ 8 進 (ビッグエンディアン) |
 | `-r` | 2 バイトずつ 8 進 (リトルエンディアン) |
 | `-s` | ファイルを Shift-JIS として読む |
@@ -335,7 +337,7 @@ ASCII のみのデータについては、jhd(1) を実際に走らせて、そ�
 ```sh
 make                            # → ./u8hd ができます
 make check                      # 構文チェック (-Wall -Wextra 込み)
-make test                       # tap 形式の回帰テスト (39 検査)
+make test                       # tap 形式の回帰テスト (43 検査)
 sudo make install               # 既定は /usr/local、PREFIX・DESTDIR 変更可
 man -l ./u8hd.1                 # 英語 man (BSD の man なら -l でローカル man を読む)
 man -l ./u8hd_ja.1              # 日本語 man
@@ -381,7 +383,7 @@ Makefile を記述してあります。単に `make install`
   バイト列は `printf` の 16 進エスケープ (`\xe6`)ではなく 8 進エスケープ
    (`\346`)で組み立てます。16 進エスケープは POSIX に無く、Debian の
   `/bin/sh` (dash)等では解釈されずにそのまま出力されてしまいます。
-  macOS 上の dash・bash・ksh で 39 検査すべてが通ることを確かめてあります。
+  macOS 上の dash・bash・ksh で 43 検査すべてが通ることを確かめてあります。
 - 文字を見る検査に使うロケールは `locale -a` を確認し、UTF-8 を名前に含むもの
   から順に実際に u8hd を走らせて確かめ、通るものを選びます。
   `C.UTF-8` という名前のロケールの無いシステムでも通ります。

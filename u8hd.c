@@ -129,6 +129,8 @@ static void		setwidth(void);
 static void		setoption(int opt);
 static void		setkanji(int code, char opt);
 static NORETURN void	usage(void);
+static void		usageput(FILE *fp);
+static NORETURN void	helput(void);
 static NORETURN void	noconv(const char *name);
 static NORETURN void	toobig(void);
 static NORETURN void	badend(void);
@@ -970,6 +972,10 @@ setoption(int opt)
 		Mbflag = 1;		/*  UTF-8 whatever the locale says  */
 		break;
 
+	case 'h':
+		helput();
+		/*  NOTREACHED  */
+
 	case 'v':
 		Vflag = 1;
 		break;
@@ -1008,16 +1014,60 @@ setkanji(int code, char opt)
 }
 
 /*
- *  usage - tell how to run this program
+ *  usageput - the way to run this program, on the stream asked for
+ */
+static void
+usageput(FILE *fp)
+{
+	fputs("Usage: ", fp);
+	fputs(Prgnam, fp);
+	fputs(" [ -abcehOrsuvw ] [ <file> ]\n", fp);
+	fputs("        [ +[x|o]<start>[k][-<length>[k]|-+[x|o]<end>[k]] ]\n", fp);
+}
+
+/*
+ *  usage - complain about the way this program was called
  */
 static NORETURN void
 usage(void)
 {
-	fputs("Usage: ", stderr);
-	fputs(Prgnam, stderr);
-	fputs(" [ -abceOrsuvw ] [ <file> ]\n", stderr);
-	fputs("        [ +[x|o]<start>[k][-<length>[k]|-+[x|o]<end>[k]] ]\n", stderr);
+	usageput(stderr);
 	exit(EXIT_FAILURE);
+}
+
+/*
+ *  helput - answer -h: the usage, one line about every option, the id
+ *
+ *  What every option does is what the English part of the README says
+ *  about it, in short.  The last line is the id string that CVS expands,
+ *  taken from its fifth byte so that the "@(#)" of it stays out of the
+ *  display; it stands for the version, which needs no separate option.
+ */
+static NORETURN void
+helput(void)
+{
+	static const char *const line[] = {
+		"-a:  ASCII only, overrules the locale",
+		"-b:  the data as octal bytes",
+		"-c:  the characters only, 64 bytes to a line",
+		"-e:  read the file as EUC-JP",
+		"-h:  this help",
+		"-o:  the data as octal words, big-endian",
+		"-r:  the data as octal words, little-endian",
+		"-s:  read the file as Shift-JIS",
+		"-u:  show UTF-8 whatever the locale says",
+		"-v:  do not fold repeated lines",
+		"-w:  double the width of a line, 32 bytes, or 128 with -c",
+		"-O:  the address in octal",
+	};
+	unsigned int	i;
+
+	usageput(stdout);
+	for (i = 0; i < sizeof(line) / sizeof(line[0]); ++i) {
+		printf("\t%s\n", line[i]);
+	}
+	printf("\t%s\n", rcsid + 4);		/*  4:  past the "@(#)"  */
+	exit(EXIT_SUCCESS);
 }
 
 /*

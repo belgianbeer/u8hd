@@ -17,7 +17,8 @@
 #	7.	-w, which doubles the width of a dumped line,
 #	8.	the two bytes that ASCII and the Japanese code sets read
 #		apart,
-#	9.	the range: where the dump begins and where it leaves off.
+#	9.	the range: where the dump begins and where it leaves off,
+#	10.	-h, the help the program prints of itself.
 #
 #  Run it with "make test", or by hand: sh ./t_u8hd.sh
 #
@@ -410,6 +411,59 @@ if env LC_ALL=C $U8HD "$TMP/range" "+8-+7" > /dev/null 2>&1; then
 	fails=$((fails + 1))
 else
 	echo "ok $count - the end behind the start"
+fi
+
+#
+#  10.  -h, the help
+#
+#  The help goes to the standard output, and comes back with 0: the usage
+#  first, then one line for every option, indented with a tab, then the id
+#  string that stands for the version.
+#
+count=$((count + 1))
+if [ "$($U8HD -h | wc -l | tr -d ' ')" -eq 15 ]; then
+	echo "ok $count - the help has a line for every option"
+else
+	echo "not ok $count - the help has a line for every option"
+	$U8HD -h | sed -e 's/^/#     /'
+	fails=$((fails + 1))
+fi
+
+#  the two lines it begins with are the usage an error prints
+count=$((count + 1))
+env LC_ALL=C $U8HD -q > "$TMP/void" 2> "$TMP/usage"
+$U8HD -h | head -2 > "$TMP/help2"
+if cmp -s "$TMP/help2" "$TMP/usage"; then
+	echo "ok $count - the help begins with the usage"
+else
+	echo "not ok $count - the help begins with the usage"
+	echo "# --- expected"
+	sed -e 's/^/#     /' "$TMP/usage"
+	echo "# --- got"
+	sed -e 's/^/#     /' "$TMP/help2"
+	fails=$((fails + 1))
+fi
+
+#  the last line is the id string, from its fifth byte
+count=$((count + 1))
+tab=$(printf '\t')
+if $U8HD -h | tail -1 | grep "^${tab}"'\$Id: u8hd\.c,v ' >/dev/null; then
+	echo "ok $count - the help ends with the id string"
+else
+	echo "not ok $count - the help ends with the id string"
+	$U8HD -h | tail -1 | sed -e 's/^/#     /'
+	fails=$((fails + 1))
+fi
+
+#  nothing of the help goes to the error stream, nor does a file matter
+count=$((count + 1))
+if $U8HD -h /there/is/no/such > "$TMP/void" 2> "$TMP/err" &&
+   [ ! -s "$TMP/err" ]; then
+	echo "ok $count - the help stays off the error stream"
+else
+	echo "not ok $count - the help stays off the error stream"
+	sed -e 's/^/#     /' "$TMP/err"
+	fails=$((fails + 1))
 fi
 
 echo "1..$count"
