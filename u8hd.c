@@ -38,9 +38,10 @@ char rcsid[] =
 #include  <ctype.h>
 #include  <errno.h>
 #include  <iconv.h>			/*  the conversion of -e and -s  */
+#include  <inttypes.h>			/*  intmax_t, strtoimax(), INTMAX_MAX  */
 #include  <langinfo.h>			/*  nl_langinfo(), CODESET  */
-#include  <limits.h>			/*  LLONG_MAX  */
 #include  <locale.h>
+#include  <stdint.h>			/*  uint64_t  */
 #include  <stdio.h>
 #include  <stdlib.h>
 #include  <string.h>
@@ -103,9 +104,8 @@ static int		utf8disp(const unsigned char *p, int len);
 static void		setpend(const unsigned char *p, int size);
 static void		putmb(const unsigned char *p, int len);
 static void		putspc(int n);
-static void		putnum(unsigned long long value, int shift, int width);
-static void		putoct(unsigned long long value, int width);
-static void		puthex(unsigned long long value, int width);
+static void		putoct(uint64_t value, int width);
+static void		puthex(uint64_t value, int width);
 static void		putaddr(void);
 static int		dmpgap(int n, int cols);
 static int		dmplead(int adv, int cols);
@@ -442,44 +442,37 @@ putmb(const unsigned char *p, int len)
 static void
 putspc(int n)
 {
-	if (n > 0) {
-		printf("%*s", n, "");
+	while (n--) {
+		putchar(' ');
 	}
 }
 
 /*
- *  putnum - print the low `width' digits of `value', `shift' bits each
+ *  putoct - print the low `width' octal digits of `value'
  */
 static void
-putnum(unsigned long long value, int shift, int width)
+putoct(uint64_t value, int width)
 {
-	static const char	digits[] = "0123456789ABCDEF";
-	const unsigned long long mask = (1ULL << shift) - 1;
-	char			buf[64];
-	int			i;
-
-	if (width < 0 || width >= (int)sizeof(buf)) {
-		width = (int)sizeof(buf) - 1;
+	if (width > 1) {
+		putoct(value >> 3, width - 1);
 	}
-	i = width;
-	buf[i] = '\0';
-	while (i > 0) {
-		buf[--i] = digits[(size_t)(value & mask)];
-		value >>= shift;
-	}
-	fputs(buf, stdout);
+	putchar((int)(value & 0x7) + '0');
 }
 
+/*
+ *  puthex - print the low `width' hexdecimal digits of `value'
+ */
 static void
-putoct(unsigned long long value, int width)
+puthex(uint64_t value, int width)
 {
-	putnum(value, 3, width);
-}
+	int	c;
 
-static void
-puthex(unsigned long long value, int width)
-{
-	putnum(value, 4, width);
+	if (width > 1) {
+		puthex(value >> 4, width - 1);
+	}
+	c = (int)(value & 0xf);
+	c += c <= 9 ? '0' : '7';
+	putchar(c);
 }
 
 /*
@@ -489,9 +482,9 @@ static void
 putaddr(void)
 {
 	if (Admode) {
-		putoct((unsigned long long)Addr, 11);
+		putoct((uint64_t)Addr, 11);
 	} else {
-		puthex((unsigned long long)Addr, 8);
+		puthex((uint64_t)Addr, 8);
 	}
 }
 
@@ -608,7 +601,7 @@ octdmp0(const unsigned char *base, int size)
 {
 	while (size > 0) {
 		putchar(' ');
-		putoct(((unsigned long long)base[0] << 8) + base[1], 6);
+		putoct(((uint64_t)base[0] << 8) + base[1], 6);
 		base += 2;
 		size -= 2;
 	}
@@ -637,7 +630,7 @@ octdmp2(const unsigned char *base, int size)
 {
 	while (size > 0) {
 		putchar(' ');
-		putoct(((unsigned long long)base[1] << 8) + base[0], 6);
+		putoct(((uint64_t)base[1] << 8) + base[0], 6);
 		base += 2;
 		size -= 2;
 	}
@@ -1175,7 +1168,7 @@ static off_t
 getnum(const char *p, const char **tail)
 {
 	char		*end;
-	long long	value;
+	intmax_t	value;
 	int		basesize = 10;
 
 	if (p[0] == '0' && (p[1] == 'x' || p[1] == 'X')) {
@@ -1191,11 +1184,11 @@ getnum(const char *p, const char **tail)
 		basesize = 8;
 	}
 	errno = 0;
-	value = strtoll(p, &end, basesize);
+	value = strtoimax(p, &end, basesize);
 	if (end == p) {
 		value = 0;			/*  nothing in front of the dash  */
 	}
-	if (errno == ERANGE || value < 0 || value > LLONG_MAX >> 10) {
+	if (errno == ERANGE || value < 0 || value > INTMAX_MAX >> 10) {
 		toobig();
 	}
 	if (*end == 'K' || *end == 'k') {
@@ -1250,7 +1243,7 @@ chkofst(const char *p)
 		if (*tail != '\0') {
 			usage();
 		}
-		if (Offset > (LLONG_MAX >> 10) - value) {
+		if (Offset > (INTMAX_MAX >> 10) - value) {
 			toobig();
 		}
 		limit = Offset + value;
