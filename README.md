@@ -175,9 +175,12 @@ cc -O2 -o u8hd u8hd.o -liconv
 ```
 
 Point `ICONVCFLAGS` and `ICONVLIBS` at Homebrew's GNU libiconv if you would
-rather use that one.  `make install` puts the two pages in `man/man1/` and
-`man/ja/man1/` under the same name `u8hd.1`, so that `man` finds the page of
-the locale it runs in; `JAMANSEC` moves the second one.
+rather use that one.  `make install` puts the two pages in `man1/` and
+`ja/man1/` of the manual tree, both under the name `u8hd.1`, so that `man`
+finds the page of the locale it runs in; `JAMANSEC` moves the second one.
+Which tree that is -- `$(PREFIX)/man`, or `$(PREFIX)/share/man` as FreeBSD
+has it -- the rule finds out by looking which of the two is there, and
+prints the line it runs; `MANDIR` settles it by hand.
 
 The installation process uses a Makefile that allows for the independent
 installation of the program itself, the English man pages, and the Japanese
@@ -208,7 +211,7 @@ To install the Japanese man pages, you must run `make install-jman` separately.
 | system | result |
 | ------ | ------ |
 | macOS (the machine it is developed on) | `make`, `make check` and `make test` all pass |
-| Linux (Debian 13, Ubuntu 24.04) | `make`, `make check` and `make test` all pass |
+| Linux (Debian 13, Ubuntu 26.04) | `make`, `make check` and `make test` all pass |
 | FreeBSD 15.1-RELEASE-p6 | `make`, `make check` and `make test` all pass |
 | NetBSD 9.4 | `make`, `make check` and `make test` all pass |
 
@@ -370,10 +373,15 @@ Makefile を記述してあります。単に `make install`
 を実行した場合、日本語man はインストールされません。日本語man をインストールする場合は、
 別途 `make install-jman` を実行する必要があります。
 
-また man のインストールは 2 か所になります。英語版は `$(PREFIX)/man/man1/u8hd.1`、
-日本語版は `$(PREFIX)/man/ja/man1/u8hd.1` です (配布物の中では `u8hd_ja.1` という
-名前ですが、locale の man が見つけるように、インストール時の名前は `u8hd.1` に
-します)。置き場所は `make JAMANSEC=ja_JP install-jman` のように変えられます。
+また man のインストールは 2 か所になります。英語版は man ツリーの
+`man1/u8hd.1`、日本語版はその `ja/man1/u8hd.1` です (配布物の中では
+`u8hd_ja.1` という名前ですが、locale の man が見つけるように、
+インストール時の名前は `u8hd.1` にします)。man ツリーは通常
+`$(PREFIX)/man` ですが、FreeBSD のように `$(PREFIX)/share/man` に
+置くものもあります。インストールの際にどちらが存在するかを見て
+決め、実行した行をそのまま表示します。`MANDIR` で直接指定も
+できます。日本語版の置き場所は `make JAMANSEC=ja_JP install-jman`
+のように変えられます。
 
 ## ポータビリティ
 
@@ -400,7 +408,7 @@ Makefile を記述してあります。単に `make install`
 | システム | 結果 |
 | -------- | ---- |
 | macOS (開発環境) | `make` / `make check` / `make test` (dash・bash・ksh) すべてパス |
-| Linux (Debian 13、Ubuntu 24.04) | `make` / `make check` / `make test` すべてパス |
+| Linux (Debian 13、Ubuntu 26.04) | `make` / `make check` / `make test` すべてパス |
 | FreeBSD 15.1-RELEASE-p6 | `make` / `make check` / `make test` すべてパス |
 | NetBSD 9.4 | `make` / `make check` / `make test` すべてパス |
 

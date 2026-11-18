@@ -24,14 +24,29 @@ OBJS	= u8hd.o
 ICONVCFLAGS	=
 ICONVLIBS	?= -liconv
 
-#  The English manual page goes to man1/ and the Japanese one to
-#  $(JAMANSEC)/man1/, both under the name u8hd.1, so that man finds the
-#  page of the locale it is running in.  In the distribution the Japanese
-#  page keeps its own name, u8hd_ja.1.
+#  The English manual page goes to man1/ under the manual tree and the
+#  Japanese one to $(JAMANSEC)/man1/ of the same tree, both under the name
+#  u8hd.1, so that man finds the page of the locale it is running in.  In the
+#  distribution the Japanese page keeps its own name, u8hd_ja.1.
+#
+#  Which tree that is differs: FreeBSD keeps the pages of $(PREFIX) under
+#  share/man, the rest of them put them straight in man.  MANDIR is therefore
+#  empty, which tells the install rules to look for the one the system has --
+#  they print the directory they picked.  Give MANDIR to say which tree to use,
+#  and DESTDIR to stage the install somewhere else.
 #
 PREFIX	= /usr/local
-MANDIR	= $(PREFIX)/man
+MANDIR	=
 JAMANSEC = ja
+
+#  pick the manual tree, in the shell of the rule that uses this
+MANPICK = if [ -n "$(MANDIR)" ]; then \
+	    d="$(DESTDIR)$(MANDIR)"; \
+	  elif [ -d "$(PREFIX)/share/man" ]; then \
+	    d="$(DESTDIR)$(PREFIX)/share/man"; \
+	  else \
+	    d="$(DESTDIR)$(PREFIX)/man"; \
+	  fi
 
 all: $(PROG)
 
@@ -61,14 +76,18 @@ install-prog: $(PROG)
 	install -m 755 $(PROG) $(DESTDIR)$(PREFIX)/bin/$(PROG)
 
 install-man:
-	install -d $(DESTDIR)$(MANDIR)/man1
-	install -m 644 u8hd.1 $(DESTDIR)$(MANDIR)/man1/u8hd.1
+	@set -e; $(MANPICK); \
+	install -d "$$d/man1"; \
+	echo install -m 644 u8hd.1 "$$d/man1/u8hd.1"; \
+	install -m 644 u8hd.1 "$$d/man1/u8hd.1"
 
 install-jman:
-	install -d $(DESTDIR)$(MANDIR)/$(JAMANSEC)/man1
-	install -m 644 u8hd_ja.1 $(DESTDIR)$(MANDIR)/$(JAMANSEC)/man1/u8hd.1
+	@set -e; $(MANPICK); \
+	install -d "$$d/$(JAMANSEC)/man1"; \
+	echo install -m 644 u8hd_ja.1 "$$d/$(JAMANSEC)/man1/u8hd.1"; \
+	install -m 644 u8hd_ja.1 "$$d/$(JAMANSEC)/man1/u8hd.1"
 
 clean:
 	$(RM) $(PROG) $(OBJS)
 
-.PHONY: all check test install clean
+.PHONY: all check test install install-prog install-man install-jman clean
