@@ -47,7 +47,7 @@
  */
 
 static char rcsid[] =
-	"@(#)$Id: u8hd.c,v 1.0 2026/11/11 05:20:07 minmin Exp $";
+	"@(#)$Id: u8hd.c,v 1.0 2026/11/18 08:45:50 minmin Exp $";
 
 /*
  *  NORETURN - tell the compiler that a function never comes back
