@@ -119,6 +119,18 @@ $ u8hd hello +16-+23
 00000010  93 E3 82 93 E3 81 AB E3                           .んに.
 ```
 
+## Useful for binary analysis
+
+u8hd is convenient for finding text embedded in binary files and examining
+the surrounding data structures.
+
+A practical workflow is:
+
+1. Widen the terminal to about 150 columns.
+2. Run: `u8hd -c -w sample.mp4` to scan a larger area of the file and locate interesting text.
+3. Note the offset of the region of interest.
+4. Inspect the area in detail: `u8hd sample.mp4 +0xOFFSET`
+
 ## Differences from jhd
 
 The layout follows `jhd`: the digits of the address, the columns of
@@ -210,9 +222,9 @@ To install the Japanese man pages, you must run `make install-jman` separately.
 
 | system | result |
 | ------ | ------ |
-| macOS (the machine it is developed on) | `make`, `make check` and `make test` all pass |
+| macOS Tahoe (the machine it is developed on) | `make`, `make check` and `make test` all pass |
 | Linux (Debian 13, Ubuntu 26.04) | `make`, `make check` and `make test` all pass |
-| FreeBSD 15.1-RELEASE-p6 | `make`, `make check` and `make test` all pass |
+| FreeBSD 15.1 | `make`, `make check` and `make test` all pass |
 | NetBSD 9.4 | `make`, `make check` and `make test` all pass |
 
 ## Author
@@ -298,6 +310,18 @@ u8hd [ -abcehOrsuvw ] [ <file> ] [ +start[k][-length[k]|-+end[k]] ]
 $ u8hd hello +16-+23
 00000010  93 E3 82 93 E3 81 AB E3                           .んに.
 ```
+
+## 便利な使い方
+
+u8hd は、バイナリファイル中に埋め込まれた文字列と、その周辺の
+データ構造を調べる用途に便利です。
+
+典型的には次のように使います。
+
+1. 端末の横幅を 150 桁程度に広げる
+2. `u8hd -c -w sample.mp4` を実行してテキストデータがある場所を調べる
+3. 目的の文字列付近のオフセットを確認する
+4. 改めて `u8hd sample.mp4 +0xOFFSET` で周辺を詳しく調べる
 
 ## jhd との違い
 
@@ -407,9 +431,9 @@ Makefile を記述してあります。単に `make install`
 
 | システム | 結果 |
 | -------- | ---- |
-| macOS (開発環境) | `make` / `make check` / `make test` (dash・bash・ksh) すべてパス |
+| macOS Tahoe (開発環境) | `make` / `make check` / `make test` (dash・bash・ksh) すべてパス |
 | Linux (Debian 13、Ubuntu 26.04) | `make` / `make check` / `make test` すべてパス |
-| FreeBSD 15.1-RELEASE-p6 | `make` / `make check` / `make test` すべてパス |
+| FreeBSD 15.1 | `make` / `make check` / `make test` すべてパス |
 | NetBSD 9.4 | `make` / `make check` / `make test` すべてパス |
 
 ## ライセンス
