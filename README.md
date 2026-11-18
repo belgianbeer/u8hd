@@ -12,7 +12,7 @@ $ u8hd hello
 00000030  A0 E5 A5 BD 0A                                     好.
 $ u8hd -c hello
 00000000  Hello ¡Hola! こんにちは 안녕하세요 你好.
-$ cat hello | u8hd +x18
+$ cat hello | u8hd +0x18
 00000010                           81 A1 E3 81 AF 20 EC 95          ..は 안
 00000020  88 EB 85 95 ED 95 98 EC  84 B8 EC 9A 94 20 E4 BD   녕하세요 你
 00000030  A0 E5 A5 BD 0A                                     好.
@@ -140,15 +140,14 @@ with what `jhd` itself prints.
 
 | date | version | |
 | ---- | ------- | - |
-| 2026-11-11 | v1.0 | written after `jhd`, with UTF-8 and libiconv |
-| 2026-11-XX | v1.1 | `-w`, which doubles the width of a line |
+| 2026-11-18 | v1.0 | Show UTF-8, based on 'jhd' |
 
 ## Contents
 
 - `u8hd.c` — the program, ANSI C / POSIX, using libiconv
 - `u8hd.1` — the manual page in English, `u8hd_ja.1` — the same in Japanese
 - `Makefile` — build and install (`PREFIX`, `DESTDIR`, `JAMANSEC` overridable)
-- `t_u8hd.sh` — 43 regression checks in tap format
+- `t_u8hd.sh` — 44 regression checks in tap format
 - `LICENSE` / `README.md`
 
 ## Building
@@ -156,7 +155,7 @@ with what `jhd` itself prints.
 ```sh
 make                            # builds ./u8hd
 make check                      # a syntax check with -Wall -Wextra
-make test                       # the regression tests (43 checks)
+make test                       # the regression tests (44 checks)
 sudo make install               # into /usr/local; PREFIX and DESTDIR are overridable
 man -l ./u8hd.1                 # the English page (BSD man; macOS has no -l)
 man -l ./u8hd_ja.1              # the Japanese page
@@ -191,7 +190,7 @@ To install the Japanese man pages, you must run `make install-jman` separately.
   with octal (`\346`) rather than hexadecimal (`\xe6`) `printf` escapes: the
   latter are not in POSIX, and dash — the shell behind `/bin/sh` on Debian —
   copies them to its output unparsed, which is what made `make test` fail
-  there.  All 43 checks pass under dash, bash and ksh.
+  there.  All 44 checks pass under dash, bash and ksh.
 - The locale the character checks need is found by walking `locale -a`,
   trying every name that says UTF-8 and asking `u8hd` itself whether the
   characters come out, so a system without a locale named `C.UTF-8` is
@@ -318,8 +317,7 @@ ASCII のみのデータについては、jhd(1) を実際に走らせて、そ�
 
 | 日付 | バージョン | 備考 |
 | ---- | --------- | ---- |
-| 2026-11-11 | v1.0 | jhd を元典に、UTF-8 表示・libiconv 変換版として新規作成 |
-| 2026-11-XX | v1.1 | 1 行のデータ量を 2 倍にする `-w` オプションを追加 |
+| 2026-11-18 | v1.0 | jhd をベースに、UTF-8 表示対応 |
 
 - 作者：民田 雅人 (Masato Minda) &lt;minmin@wide.ad.jp&gt;
 
@@ -337,7 +335,7 @@ ASCII のみのデータについては、jhd(1) を実際に走らせて、そ�
 ```sh
 make                            # → ./u8hd ができます
 make check                      # 構文チェック (-Wall -Wextra 込み)
-make test                       # tap 形式の回帰テスト (43 検査)
+make test                       # tap 形式の回帰テスト (44 検査)
 sudo make install               # 既定は /usr/local、PREFIX・DESTDIR 変更可
 man -l ./u8hd.1                 # 英語 man (BSD の man なら -l でローカル man を読む)
 man -l ./u8hd_ja.1              # 日本語 man
@@ -383,7 +381,7 @@ Makefile を記述してあります。単に `make install`
   バイト列は `printf` の 16 進エスケープ (`\xe6`)ではなく 8 進エスケープ
    (`\346`)で組み立てます。16 進エスケープは POSIX に無く、Debian の
   `/bin/sh` (dash)等では解釈されずにそのまま出力されてしまいます。
-  macOS 上の dash・bash・ksh で 43 検査すべてが通ることを確かめてあります。
+  macOS 上の dash・bash・ksh で 44 検査すべてが通ることを確かめてあります。
 - 文字を見る検査に使うロケールは `locale -a` を確認し、UTF-8 を名前に含むもの
   から順に実際に u8hd を走らせて確かめ、通るものを選びます。
   `C.UTF-8` という名前のロケールの無いシステムでも通ります。

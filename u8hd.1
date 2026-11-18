@@ -1,15 +1,15 @@
-.TH U8HD 1 "2026-11-12"
+.TH U8HD 1 "2026-11-18"
 .SH NAME
 u8hd \- hexadecimal, octal, ascii and UTF-8 Japanese dump
 .SH SYNOPSIS
 u8hd [\ \fB-abcehOrsuvw\fR\ ] [\ \fIfile\fR\ ]
-[\ \fB+offset[k][\-length[k]|\-+end[k]]\fR\ ]
+[\ \fB+start[\-length|\-+end]\fR\ ]
 .SH DESCRIPTION
 u8hd dumps a file in the very same layout that jhd(1), the Japanese hex
 dump tool, has always used, but its character column is built for UTF-8.
 .PP
-u8hd was written because the format of od(1) is hard to read (to its
-author); it is jhd(1) with UTF-8 put in its place.  Started without
+u8hd is based on jhd(1), with the character display component replaced to
+support UTF-8. Started without
 options, it prints for every line of a dump the offset in the file in
 8 hexadecimal digits, 16 bytes of data in 2 hexadecimal digits apiece, and
 the same data as characters to the right of that.  Where the data holds
@@ -34,9 +34,8 @@ two bytes and a UTF-8 character is up to four.
 .TP
 any other locale
 A locale that cannot display UTF-8, the C locale above all, leaves the
-character column at ASCII and shows every byte of 0x80 or above as a dot,
-which is the display jhd gives when TTYPE is not set.  \-u asks for UTF-8
-whatever the locale says.
+character column at ASCII and shows every byte of 0x80 or above as a dot.
+\-u asks for UTF-8 whatever the locale says.
 .SH OPTIONS
 .TP
 \-a
@@ -55,8 +54,9 @@ the characters are converted to UTF-8 for the display.
 .TP
 \-h
 Write the help on the standard output: the usage, one line about every
-option, and, last of all, the id string that tells which version this
-is.  No file is read, and the exit status is 0.
+option, one about the numbers an offset takes, and, last of all, the id
+string that tells which version this is.  No file is read, and the exit
+status is 0.
 .TP
 \-o
 Dump the data word by word in octal, in big-endian byte order, whatever the
@@ -99,8 +99,8 @@ Given as \fB-eu\fR, the file is read as EUC-JP and UTF-8 is written no
 matter what the locale is; \fB-su\fR does the same for Shift-JIS.  With
 \fB-e\fR or \fB-s\fR alone, the output still follows the locale, so in the
 C locale a Kanji comes out as a pair of dots: add \fB-u\fR.
-.SH OFFSET
-An offset is written \[aq]+number\[aq], in decimal, and says where in the
+.SH SETTING DISPLAY RANGE
+A start is written \[aq]+number\[aq], in decimal, and says where in the
 file to begin looking.  An \[aq]x\[aq] before the number makes it
 hexadecimal, and so does \[aq]0x\[aq] in front of it; an \[aq]o\[aq]
 makes it octal, and so does a leading \[aq]0\[aq].  A \[aq]k\[aq] behind
@@ -130,15 +130,13 @@ converted, are shown as a dot.
 .SH EXAMPLE
 .in +4n
 .nf
-$ u8hd -e sample
-00000000  48 65 6C 6C 6F 2C 20 C6  FC CB DC B8 EC A5 C6 A5  Hello, 日本語テス
-00000010  B9 A5 C8 0A                                       ト.
-.fi
-.in -4n
-.PP
-The A5 that ends the first line joins the B9 that begins the second to
-make one kana, and the character column of the second line therefore
-begins one byte late.
+$ cat hello
+Hello ¡Hola! こんにちは 안녕하세요 你好
+$ u8hd hello
+00000000  48 65 6C 6C 6F 20 C2 A1  48 6F 6C 61 21 20 E3 81  Hello ¡Hola! こ
+00000010  93 E3 82 93 E3 81 AB E3  81 A1 E3 81 AF 20 EC 95   んにちは 안
+00000020  88 EB 85 95 ED 95 98 EC  84 B8 EC 9A 94 20 E4 BD   녕하세요 你
+00000030  A0 E5 A5 BD 0A                                     好.
 .SH EXIT STATUS
 .TP 4n
 0

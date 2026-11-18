@@ -3,7 +3,7 @@
  *
  *    Written by Masato Minda <minmin@wide.ad.jp>
  *
- *    Created 2026-11-11  Version 1.0
+ *    Created 2026-11-18  Version 1.0
  *
  *  u8hd dumps a file in the very same layout the Japanese hex dump tool
  *  jhd(1) has always used, but the character column of the dump is built
@@ -19,8 +19,7 @@
  *  to UTF-8 for the display, with libiconv(3).  The TTYPE environment
  *  variable that jhd looks at is not used here.
  */
-/*  not static, so that the id string stays in the image  */
-char rcsid[] =
+static char rcsid[] =
 	"@(#)$Id: u8hd.c,v 1.0 2026/11/11 05:20:07 minmin Exp $";
 
 /*
@@ -70,9 +69,9 @@ char rcsid[] =
 #define  C_EUC           2		/*  EUC-JP  */
 #define  C_SJIS          3		/*  Shift-JIS  */
 
-static unsigned char	Buf[BSIZE];	/*  input buffer  */
-static unsigned char	Tbuf[XWIDTH];	/*  copy of the last dumped line  */
-static const unsigned char *Lbuf;	/*  last Dwidth bytes dumped  */
+static uint8_t	Buf[BSIZE];	/*  input buffer  */
+static uint8_t	Tbuf[XWIDTH];	/*  copy of the last dumped line  */
+static const uint8_t *Lbuf;	/*  last Dwidth bytes dumped  */
 
 static const char	*Prgnam = "u8hd";
 static off_t		Offset;		/*  where the dump begins  */
@@ -87,7 +86,7 @@ static int		Wflag;		/*  the double width option  */
 static int		Putast;		/*  '*' display flag  */
 static int		Incode = C_UTF8;	/*  code set of the file  */
 static int		Mbflag;		/*  the display holds UTF-8  */
-static unsigned char	Pend[MAXSEQ];	/*  head of a character cut by EOL  */
+static uint8_t	Pend[MAXSEQ];	/*  head of a character cut by EOL  */
 static int		Pendlen;	/*  bytes kept, 0 when none  */
 static iconv_t		Cvt = (iconv_t)-1;	/*  Incode into UTF-8  */
 
@@ -96,33 +95,33 @@ static iconv_t		Cvt = (iconv_t)-1;	/*  Incode into UTF-8  */
  */
 static void		setcodeset(void);
 static void		openconv(void);
-static int		charlen(const unsigned char *p, int avail);
-static int		utf8len(const unsigned char *p, int avail);
-static int		euclen(const unsigned char *p, int avail);
-static int		sjislen(const unsigned char *p, int avail);
-static int		utf8disp(const unsigned char *p, int len);
-static void		setpend(const unsigned char *p, int size);
-static void		putmb(const unsigned char *p, int len);
+static int		charlen(const uint8_t *p, int avail);
+static int		utf8len(const uint8_t *p, int avail);
+static int		euclen(const uint8_t *p, int avail);
+static int		sjislen(const uint8_t *p, int avail);
+static int		utf8disp(const uint8_t *p, int len);
+static void		setpend(const uint8_t *p, int size);
+static void		putmb(const uint8_t *p, int len);
 static void		putspc(int n);
 static void		putoct(uint64_t value, int width);
 static void		puthex(uint64_t value, int width);
 static void		putaddr(void);
 static int		dmpgap(int n, int cols);
 static int		dmplead(int adv, int cols);
-static int		chksame(const unsigned char *cur,
-				    const unsigned char *old, int n);
-static void		dmpmb(const unsigned char *base, int size);
-static void		dmpascii(const unsigned char *base, int size);
-static void		dmptext(const unsigned char *base, int size);
-static void		octdmp0(const unsigned char *base, int size);
-static void		octdmp1(const unsigned char *base, int size, int adr);
-static void		octdmp2(const unsigned char *base, int size);
-static void		hexdmp(const unsigned char *base, int size, int adr);
-static int		putpartial(const unsigned char *buf, int size);
-static void		dmpmode(const unsigned char *buf, int size, int adv);
+static int		chksame(const uint8_t *cur,
+				    const uint8_t *old, int n);
+static void		dmpmb(const uint8_t *base, int size);
+static void		dmpascii(const uint8_t *base, int size);
+static void		dmptext(const uint8_t *base, int size);
+static void		octdmp0(const uint8_t *base, int size);
+static void		octdmp1(const uint8_t *base, int size, int adr);
+static void		octdmp2(const uint8_t *base, int size);
+static void		hexdmp(const uint8_t *base, int size, int adr);
+static int		putpartial(const uint8_t *buf, int size);
+static void		dmpmode(const uint8_t *buf, int size, int adv);
 static void		dmpnl(int how);
-static void		dmpall(const unsigned char *buf, int size);
-static void		setlast(const unsigned char *ptr);
+static void		dmpall(const uint8_t *buf, int size);
+static void		setlast(const uint8_t *ptr);
 static void		dmpmain(void);
 static const char	*setname(const char *path);
 static void		setwidth(void);
@@ -166,8 +165,8 @@ setcodeset(void)
 		cs = "";
 	}
 	for (i = 0, j = 0; cs[i] != '\0' && j < sizeof(norm) - 1; ++i) {
-		if (isalnum((unsigned char)cs[i])) {
-			norm[j++] = (char)tolower((unsigned char)cs[i]);
+		if (isalnum((uint8_t)cs[i])) {
+			norm[j++] = (char)tolower((uint8_t)cs[i]);
 		}
 	}
 	norm[j] = '\0';
@@ -229,7 +228,7 @@ openconv(void)
  *  that a stream of random bytes cannot make a character out of them.
  */
 static int
-utf8len(const unsigned char *p, int avail)
+utf8len(const uint8_t *p, int avail)
 {
 	static const unsigned long	first[] = {0, 0, 0x80, 0x800, 0x10000};
 	int		c = p[0];
@@ -273,7 +272,7 @@ utf8len(const unsigned char *p, int avail)
  *  undisplayed.
  */
 static int
-euclen(const unsigned char *p, int avail)
+euclen(const uint8_t *p, int avail)
 {
 	int	c = p[0];
 
@@ -314,7 +313,7 @@ euclen(const unsigned char *p, int avail)
  *  itself, as the half width katakana of Shift-JIS does.
  */
 static int
-sjislen(const unsigned char *p, int avail)
+sjislen(const uint8_t *p, int avail)
 {
 	int	c = p[0];
 
@@ -341,7 +340,7 @@ sjislen(const unsigned char *p, int avail)
  *  charlen - how long is the character at p, Incode being its code set
  */
 static int
-charlen(const unsigned char *p, int avail)
+charlen(const uint8_t *p, int avail)
 {
 	switch (Incode) {
 	case C_EUC:
@@ -360,7 +359,7 @@ charlen(const unsigned char *p, int avail)
  *  looked at.
  */
 static int
-utf8disp(const unsigned char *p, int len)
+utf8disp(const uint8_t *p, int len)
 {
 	unsigned long	cp;
 	int		i;
@@ -376,7 +375,7 @@ utf8disp(const unsigned char *p, int len)
  *  setpend - keep the head of a character the line boundary cut
  */
 static void
-setpend(const unsigned char *p, int size)
+setpend(const uint8_t *p, int size)
 {
 	if (size > (int)sizeof(Pend)) {
 		size = (int)sizeof(Pend);
@@ -394,7 +393,7 @@ setpend(const unsigned char *p, int size)
  *  jhd shows an unprintable byte.
  */
 static void
-putmb(const unsigned char *p, int len)
+putmb(const uint8_t *p, int len)
 {
 	char		inbuf[MAXSEQ];
 	char		outbuf[MAXUTF];
@@ -429,7 +428,7 @@ putmb(const unsigned char *p, int len)
 	(void)iconv(Cvt, NULL, NULL, &outp, &outleft);	/*  shift state  */
 	if (iconv(Cvt, (void *)&inp, &inleft, &outp, &outleft) == (size_t)-1 ||
 	    inleft != 0 || outp == outbuf ||
-	    !utf8disp((unsigned char *)outbuf, (int)(outp - outbuf))) {
+	    !utf8disp((uint8_t *)outbuf, (int)(outp - outbuf))) {
 		putchar('.');
 		return;
 	}
@@ -522,7 +521,7 @@ dmplead(int adv, int cols)
  *  chksame - check n byte same data
  */
 static int
-chksame(const unsigned char *cur, const unsigned char *old, int n)
+chksame(const uint8_t *cur, const uint8_t *old, int n)
 {
 	if (old == NULL) {
 		return 0;
@@ -544,7 +543,7 @@ chksame(const unsigned char *cur, const unsigned char *old, int n)
  *  half on one line and half on the next.
  */
 static void
-dmpmb(const unsigned char *base, int size)
+dmpmb(const uint8_t *base, int size)
 {
 	int	len;
 
@@ -569,7 +568,7 @@ dmpmb(const unsigned char *base, int size)
  *  dmpascii - the character column of a locale that shows no UTF-8
  */
 static void
-dmpascii(const unsigned char *base, int size)
+dmpascii(const uint8_t *base, int size)
 {
 	int	c;
 
@@ -583,7 +582,7 @@ dmpascii(const unsigned char *base, int size)
  *  dmptext - dump the character column the locale can show
  */
 static void
-dmptext(const unsigned char *base, int size)
+dmptext(const uint8_t *base, int size)
 {
 	putchar(' ');
 	if (Mbflag) {
@@ -597,7 +596,7 @@ dmptext(const unsigned char *base, int size)
  *  octdmp0 - dump octal in word
  */
 static void
-octdmp0(const unsigned char *base, int size)
+octdmp0(const uint8_t *base, int size)
 {
 	while (size > 0) {
 		putchar(' ');
@@ -611,7 +610,7 @@ octdmp0(const unsigned char *base, int size)
  *  octdmp1 - dump octal in byte
  */
 static void
-octdmp1(const unsigned char *base, int size, int adr)
+octdmp1(const uint8_t *base, int size, int adr)
 {
 	while (size--) {
 		putchar(' ');
@@ -626,7 +625,7 @@ octdmp1(const unsigned char *base, int size, int adr)
  *  octdmp2 - dump octal in reverse word
  */
 static void
-octdmp2(const unsigned char *base, int size)
+octdmp2(const uint8_t *base, int size)
 {
 	while (size > 0) {
 		putchar(' ');
@@ -643,7 +642,7 @@ octdmp2(const unsigned char *base, int size)
  *  byte of a full line, whose own blank to the character column follows.
  */
 static void
-hexdmp(const unsigned char *base, int size, int adr)
+hexdmp(const uint8_t *base, int size, int adr)
 {
 	while (size--) {
 		putchar(' ');
@@ -665,9 +664,9 @@ hexdmp(const unsigned char *base, int size, int adr)
  *  character column.
  */
 static int
-putpartial(const unsigned char *buf, int size)
+putpartial(const uint8_t *buf, int size)
 {
-	unsigned char	tmp[MAXSEQ + 4];
+	uint8_t	tmp[MAXSEQ + 4];
 	int		n = Pendlen;
 	int		k;
 	int		len;
@@ -702,7 +701,7 @@ putpartial(const unsigned char *buf, int size)
  *  character putpartial() has just finished.
  */
 static void
-dmpmode(const unsigned char *buf, int size, int adv)
+dmpmode(const uint8_t *buf, int size, int adv)
 {
 	int	n;
 	int	cross;		/*  bytes this line gave to the last one  */
@@ -782,7 +781,7 @@ dmpnl(int how)
  *  dmpall - dump a block that was read in
  */
 static void
-dmpall(const unsigned char *buf, int size)
+dmpall(const uint8_t *buf, int size)
 {
 	int	first = (int)(Offset - Addr);	/*  bytes to skip, 1st line  */
 	int	width = (int)Dwidth;
@@ -835,10 +834,10 @@ dmpall(const unsigned char *buf, int size)
 }
 
 static void
-setlast(const unsigned char *ptr)
+setlast(const uint8_t *ptr)
 {
 	int	n;
-	unsigned char	*bp;
+	uint8_t	*bp;
 
 	n = (int)Dwidth;
 	Lbuf = bp = Tbuf;
@@ -1014,8 +1013,8 @@ usageput(FILE *fp)
 {
 	fputs("Usage: ", fp);
 	fputs(Prgnam, fp);
-	fputs(" [ -abcehOrsuvw ] [ <file> ]\n", fp);
-	fputs("        [ +[x|o]<start>[k][-<length>[k]|-+[x|o]<end>[k]] ]\n", fp);
+	fputs(" [ -abcehOrsuvw ] [ <file> ] ", fp);
+	fputs("[ +<start>[-<length>|-+<end> ]]\n", fp);
 }
 
 /*
@@ -1029,13 +1028,18 @@ usage(void)
 }
 
 /*
- *  helput - answer -h: the usage, one line about every option, the id
+ *  helput - answer -h: the usage, a line about every option, the
+ *  numbers an offset takes, and the id
  *
  *  What every option does is what the English part of the README says
- *  about it, in short.  The last line is the id string that CVS expands,
- *  taken from its fifth byte so that the "@(#)" of it stays out of the
- *  display; it stands for the version, which needs no separate option.
+ *  about it, in short.  The line about the numbers stands for the [k] of
+ *  the synopsis, which is left out of the usage to keep it to a line.
+ *  The last line is the id string that CVS expands, taken from its fifth
+ *  byte so that the "@(#)" of it stays out of the display; it stands for
+ *  the version, which needs no separate option.
  */
+#define puttabstrlf(s)	{putchar('\t'); fputs(s, stdout); putchar('\n');}
+
 static NORETURN void
 helput(void)
 {
@@ -1057,9 +1061,11 @@ helput(void)
 
 	usageput(stdout);
 	for (i = 0; i < sizeof(line) / sizeof(line[0]); ++i) {
-		printf("\t%s\n", line[i]);
+		puttabstrlf(line[i]);
 	}
-	printf("\t%s\n", rcsid + 4);		/*  4:  past the "@(#)"  */
+	puttabstrlf("number:  x or 0x for hexdecimal, o for octal,"
+	    " k times 1024");		/*  what +start, -length and -+end take  */
+	puttabstrlf(rcsid + 4);			/*  4:  past the "@(#)"  */
 	exit(EXIT_SUCCESS);
 }
 
