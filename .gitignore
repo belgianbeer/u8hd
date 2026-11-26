@@ -1,7 +1,10 @@
 u8hd
+u8hd.exe
 *.o
+*.obj
 CVS
 .cvsignore
+.vscode
+_*
 fuga*
 hoge*
-test*
