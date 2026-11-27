@@ -4,6 +4,7 @@
  *    Written by Masato Minda <minmin@wide.ad.jp>
  *
  *    Created 2026-11-18  Version 1.0
+ *    Updated 2026-11-27  Version 1.1
  *
  *  u8hd dumps a file in the very same layout the Japanese hex dump tool
  *  jhd(1) has always used, but the character column of the dump is built
@@ -53,7 +54,7 @@
  */
 
 static char rcsid[] =
-	"@(#)$Id: u8hd.c,v 1.0 2026/11/18 08:45:50 minmin Exp $";
+	"@(#)$Id: u8hd.c,v 1.1 2026/11/27 07:07:59 minmin Exp $";
 
 /*
  *  NORETURN - tell the compiler that a function never comes back

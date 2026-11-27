@@ -167,6 +167,7 @@ with what `jhd` itself prints.
 | date | version | |
 | ---- | ------- | - |
 | 2026-11-18 | v1.0 | Show UTF-8, based on 'jhd' |
+| 2026-11-27 | v1.1 | now compiles and runs on Windows |
 
 ## Contents
 
@@ -216,6 +217,13 @@ To install the Japanese man pages, you must run `make install-jman` separately.
 
 ### Building u8hd.exe for Windows
 
+A ready-made `u8hd.exe` waits in the zip named
+`u8hd-<version>-windows-x86_64.zip` among
+[the releases](https://github.com/belgianbeer/u8hd/releases) of this
+repository, which the CI makes with the command below whenever a tag is
+pushed; unpack the zip and run the program.  Those who only want to run u8hd
+need no compiler of their own.
+
 To compile on Windows, you only need the MinGW-w64 version of gcc; no other
 special libraries are required. Compilation is done as follows, without using
 make or Makefile.
@@ -262,7 +270,7 @@ and debug information. Remove `-s` if you want to run it in a debugger.
 
 | system | result |
 | ------ | ------ |
-| macOS Tahoe (the machine it is developed on) | `make`, `make check` and `make test` all pass |
+| macOS Golden Gate (the machine it is developed on) | `make`, `make check` and `make test` all pass |
 | Linux (Debian 13, Ubuntu 26.04) | `make`, `make check` and `make test` all pass |
 | FreeBSD 15.1 | `make`, `make check` and `make test` all pass |
 | NetBSD 9.4 | `make`, `make check` and `make test` all pass |
@@ -394,6 +402,7 @@ ASCII のみのデータについては、jhd(1) を実際に走らせて、そ�
 | 日付 | バージョン | 備考 |
 | ---- | --------- | ---- |
 | 2026-11-18 | v1.0 | jhd をベースに、UTF-8 表示対応 |
+| 2026-11-27 | v1.1 | Windows で動作するように修正 |
 
 - 作者：民田 雅人 (Masato Minda) &lt;minmin@wide.ad.jp&gt;
 
@@ -457,6 +466,12 @@ Makefile を記述してあります。単に `make install`
 のように変えられます。
 
 ### Windows 版 u8hd.exe のビルド
+
+ビルド済みの `u8hd.exe` は
+[Releases](https://github.com/belgianbeer/u8hd/releases) に添付される
+`u8hd-<version>-windows-x86_64.zip` を展開すると得られます。zip には `u8hd.exe` と
+`LICENSE` が入っています。この zip はタグが push されたときに GitHub Actions が
+下のコードで作ります。実行するだけならコンパイルは不要です。
 
 Windows でコンパイルするには、MinGW-w64 の gcc を用意すればよく、他の特別なライブラリ等は不要です。コンパイルは次のように行い、make 並びに Makefile は使いません。
 
