@@ -1,0 +1,277 @@
+#
+#  build and test u8hd, and put u8hd.exe on the release of a tag
+#
+#  The POSIX systems are built with the Makefile and checked with t_u8hd.sh,
+#  which asks for a shell, a UTF-8 locale and the iconv command to build its
+#  data.  The Makefile is the one of a POSIX make and the program is a single
+#  .c file, so Windows is built with the one command the README tells instead
+#  -- no make, and nothing to add to the Makefile for it -- and checked
+#  against the same dumps t_u8hd.sh expects.  A pipe is UTF-8 on Windows as
+#  much as on the systems u8hd was written for, so those lines of comparison
+#  are byte for byte the ones of the test script.
+#
+name: build
+
+on:
+  push:
+    branches: [main, master]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  #
+  #  the systems the program is written for: the build, the syntax check and
+  #  the whole of the regression tests
+  #
+  posix:
+    name: ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - name: the syntax check
+        run: make check
+      - name: the build
+        run: make
+      - name: the regression tests
+        run: make test
+      - name: the version the build carries
+        run: ./u8hd -h | tail -n 3
+
+  #
+  #  Windows: the one command of the README, with a syntax check before it.
+  #  The WARNFLAGS of the Makefile are named out here, because the make of a
+  #  POSIX system is what that rule is written for and there is none here.
+  #
+  windows:
+    name: windows (u8hd.exe)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: the gcc of MinGW-w64
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: MINGW64
+          update: true
+          install: mingw-w64-x86_64-gcc
+
+      - name: the syntax check, which is make check elsewhere
+        shell: msys2 {0}
+        run: |
+          gcc -D_XOPEN_SOURCE=700 -Wall -Wextra -Wstrict-prototypes \
+              -Wold-style-definition -Wmissing-prototypes \
+              -Wmissing-declarations -fsyntax-only u8hd.c
+
+      - name: the build, which is one command and no make
+        shell: msys2 {0}
+        run: |
+          gcc -O2 -static -s -o u8hd.exe u8hd.c
+          ls -l u8hd.exe
+          ./u8hd.exe -h | head -n 1
+
+      - name: the checks of the dump
+        shell: msys2 {0}
+        run: |
+          set -e
+          U8HD=./u8hd.exe
+          #  a path the program of Windows opens has to be one it can find on
+          #  its own, and an MSYS path of its own it cannot: stay relative
+          TMP=ci-win
+          rm -rf "$TMP"
+          mkdir -p "$TMP"
+          count=0
+          fails=0
+          tab=$(printf '\t')
+          checkit()
+          {
+            name=$1
+            expected=$2
+            shift 2
+            count=$((count + 1))
+            printf '%s\n' "$expected" > "$TMP/e"
+            if ! "$@" > "$TMP/g" 2> "$TMP/err"; then
+              echo "not ok $count - $name (u8hd did not run)"
+              sed -e 's/^/#     /' "$TMP/err"
+              fails=$((fails + 1))
+              return
+            fi
+            #  a console is given the CR of the line end of Windows, and a
+            #  pipe is not; the line feeds alone are what is compared
+            tr -d '\r' < "$TMP/g" > "$TMP/x"
+            if cmp -s "$TMP/e" "$TMP/x"; then
+              echo "ok $count - $name"
+            else
+              echo "not ok $count - $name"
+              echo "# --- expected"
+              sed -e 's/^/#     /' "$TMP/e"
+              echo "# --- got"
+              sed -e 's/^/#     /' "$TMP/x"
+              fails=$((fails + 1))
+            fi
+          }
+          printf 'Hello, world!\n' > "$TMP/ascii"
+          checkit "ascii, the layout of jhd" \
+            '00000000  48 65 6C 6C 6F 2C 20 77  6F 72 6C 64 21 0A        Hello, world!.' \
+            $U8HD "$TMP/ascii"
+          printf 'abcdefghijklmnop' > "$TMP/one"
+          checkit "eight bytes, from the middle of a line" \
+            '00000000                           69 6A 6B 6C 6D 6E 6F 70          ijklmnop' \
+            $U8HD "$TMP/one" +8
+          head -c 48 /dev/zero > "$TMP/zero"
+          checkit "lines that repeat are folded into a star" \
+            '00000000  00 00 00 00 00 00 00 00  00 00 00 00 00 00 00 00  ................
+          *
+          0000002F' \
+            $U8HD "$TMP/zero"
+          printf '123456789012345\346\227\24567890123456789012345\n' > "$TMP/u8"
+          checkit "a UTF-8 character across the end of a line" \
+            '00000000  31 32 33 34 35 36 37 38  39 30 31 32 33 34 35 E6  123456789012345日
+          00000010  97 A5 36 37 38 39 30 31  32 33 34 35 36 37 38 39    67890123456789
+          00000020  30 31 32 33 34 35 0A                              012345.' \
+            $U8HD "$TMP/u8"
+          printf 'abc\346\227' > "$TMP/cut"
+          checkit "UTF-8 cut by the end of the file" \
+            '00000000  61 62 63 E6 97                                    abc..' \
+            $U8HD "$TMP/cut"
+          printf 'a\377\376\200b' > "$TMP/bad"
+          checkit "bytes that make no character at all" \
+            '00000000  61 FF FE 80 62                                    a...b' \
+            $U8HD "$TMP/bad"
+          printf 'Hello, \306\374\313\334\270\354\245\306\245\271\245\310\n' \
+            > "$TMP/euc"
+          checkit "EUC-JP is read and shown as UTF-8" \
+            '00000000  48 65 6C 6C 6F 2C 20 C6  FC CB DC B8 EC A5 C6 A5  Hello, 日本語テス
+          00000010  B9 A5 C8 0A                                        ト.' \
+            $U8HD -e "$TMP/euc"
+          printf 'Hello, \223\372\226\173\214\352\203\145\203\130\203\147\n' \
+            > "$TMP/sjis"
+          checkit "Shift-JIS is read and shown as UTF-8" \
+            '00000000  48 65 6C 6C 6F 2C 20 93  FA 96 7B 8C EA 83 65 83  Hello, 日本語テス
+          00000010  58 83 67 0A                                        ト.' \
+            $U8HD -s "$TMP/sjis"
+          printf '\223\372\226\173\214\352' > "$TMP/h.sjis"
+          checkit "-su reads Shift-JIS and writes UTF-8" \
+            '00000000  93 FA 96 7B 8C EA                                 日本語' \
+            $U8HD -su "$TMP/h.sjis"
+          printf '\306\374\313\334\270\354' > "$TMP/h.euc"
+          checkit "-eu reads EUC-JP and writes UTF-8" \
+            '00000000  C6 FC CB DC B8 EC                                 日本語' \
+            $U8HD -eu "$TMP/h.euc"
+          printf '\261\262\263' > "$TMP/kana"
+          checkit "the half width katakana of Shift-JIS" \
+            '00000000  B1 B2 B3                                          ｱｲｳ' \
+            $U8HD -s "$TMP/kana"
+          printf '\250\134\261' > "$TMP/yen"
+          checkit "the 0x5C of a Shift-JIS file" \
+            '00000000  A8 5C B1                                          ｨ\ｱ' \
+            $U8HD -s "$TMP/yen"
+          printf 'Hello, \244\242\244\244\244\246\244\250\306' > "$TMP/dangle"
+          checkit "an EUC-JP kanji head left by the end of the file" \
+            '00000000  48 65 6C 6C 6F 2C 20 A4  A2 A4 A4 A4 A6 A4 A8 C6  Hello, あいうえ.' \
+            $U8HD -e "$TMP/dangle"
+          printf 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789abcd' > "$TMP/wide"
+          checkit "thirty two bytes to a line, with -w" \
+            '00000000  41 42 43 44 45 46 47 48  49 4A 4B 4C 4D 4E 4F 50  51 52 53 54 55 56 57 58  59 5A 30 31 32 33 34 35  ABCDEFGHIJKLMNOPQRSTUVWXYZ012345
+          00000020  36 37 38 39 61 62 63 64                                                                             6789abcd' \
+            $U8HD -w "$TMP/wide"
+          checkit "the sixty bytes of the character dump, with -c" \
+            '00000000  ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789abcd' \
+            $U8HD -c "$TMP/wide"
+          checkit "the address in octal, with -O" \
+            '00000000000  48 65 6C 6C 6F 2C 20 77  6F 72 6C 64 21 0A        Hello, world!.' \
+            $U8HD -O "$TMP/ascii"
+          printf '\346\227\245\346\234\254\350\252\236' > "$TMP/h.u8"
+          checkit "no characters at all, with -a" \
+            '00000000  E6 97 A5 E6 9C AC E8 AA  9E                       .........' \
+            $U8HD -a "$TMP/h.u8"
+          printf 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ\n\n' \
+            > "$TMP/range"
+          checkit "the first twenty bytes, with +-20" \
+            '00000000  41 42 43 44 45 46 47 48  49 4A 4B 4C 4D 4E 4F 50  ABCDEFGHIJKLMNOP
+          00000010  51 52 53 54                                       QRST' \
+            $U8HD "$TMP/range" '+-20'
+          checkit "a range that runs into the end" \
+            '00000030                           55 56 57 58 59 5A 0A 0A          UVWXYZ..' \
+            $U8HD "$TMP/range" +56-16
+          count=$((count + 1))
+          if $U8HD -es "$TMP/ascii" > /dev/null 2>&1; then
+            echo "not ok $count - -e and -s are not to be mixed"
+            fails=$((fails + 1))
+          else
+            echo "ok $count - -e and -s are not to be mixed"
+          fi
+          count=$((count + 1))
+          if $U8HD "$TMP/range" "+8-+7" > /dev/null 2>&1; then
+            echo "not ok $count - the end behind the start"
+            fails=$((fails + 1))
+          else
+            echo "ok $count - the end behind the start"
+          fi
+          count=$((count + 1))
+          if [ "$($U8HD -h | grep -c "^${tab}-")" -eq 12 ] &&
+             $U8HD -h | grep "^${tab}"'\$Id: u8hd\.c,v ' > /dev/null; then
+            echo "ok $count - the help of the program itself"
+          else
+            echo "not ok $count - the help of the program itself"
+            $U8HD -h
+            fails=$((fails + 1))
+          fi
+          echo "1..$count"
+          if [ $fails -ne 0 ]; then
+            echo "# $fails of $count checks fail"
+            exit 1
+          fi
+          echo "# all $count checks pass"
+          rm -rf "$TMP"
+
+      - name: the binary of this run
+        shell: msys2 {0}
+        run: |
+          case "$GITHUB_REF_NAME" in
+            v*) name="u8hd-$GITHUB_REF_NAME-windows-x86_64.exe" ;;
+            *)  name="u8hd-snapshot-windows-x86_64.exe" ;;
+          esac
+          cp u8hd.exe "$name"
+          ls -l "$name"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: u8hd-windows-x86_64
+          path: u8hd-*-windows-x86_64.exe
+          if-no-files-found: error
+
+  #
+  #  A tag is what asks for this: the u8hd.exe of the windows job joins the
+  #  release of the tag, where GitHub keeps the source of it as a zip and a
+  #  tarball of its own accord.  The job waits for the tests of the other
+  #  systems, so that a release is only made of a version that passes them.
+  #
+  release:
+    name: the release of a tag
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [posix, windows]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: the binaries the builds made
+        uses: actions/download-artifact@v4
+        with:
+          pattern: u8hd-*
+          path: dist
+          merge-multiple: true
+
+      - name: the files of the release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*
+          generate_release_notes: true
+
+
+
+

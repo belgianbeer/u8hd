@@ -418,7 +418,7 @@ fi
 #
 #  The help goes to the standard output, and comes back with 0: the usage
 #  first, then one line for every option, indented with a tab, then the id
-#  string that stands for the version.
+#  string that stands for the version, a line more or less behind it.
 #
 tab=$(printf '\t')
 count=$((count + 1))
@@ -446,13 +446,15 @@ else
 	fails=$((fails + 1))
 fi
 
-#  the last line is the id string, from its fifth byte
+#  the id string, taken from its fifth byte, is in the help and says which
+#  version this is.  Where it stands is not looked at: a line of its own can
+#  follow it, and the one that points at the home of the program does today.
 count=$((count + 1))
-if $U8HD -h | tail -1 | grep "^${tab}"'\$Id: u8hd\.c,v ' >/dev/null; then
-	echo "ok $count - the help ends with the id string"
+if $U8HD -h | grep "^${tab}"'\$Id: u8hd\.c,v ' >/dev/null; then
+	echo "ok $count - the help carries the id string"
 else
-	echo "not ok $count - the help ends with the id string"
-	$U8HD -h | tail -1 | sed -e 's/^/#     /'
+	echo "not ok $count - the help carries the id string"
+	$U8HD -h | sed -e 's/^/#     /'
 	fails=$((fails + 1))
 fi
 

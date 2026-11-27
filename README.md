@@ -36,9 +36,13 @@ both the original bytes and their text representation at the same time.
   the line it begins in, and the line below leaves that many blanks (see below)
 - lines that repeat are folded into a `*` (`-v` to see them all)
 - a file in an old Japanese code set is read as it is and shown in UTF-8:
-  `-e` for EUC-JP, `-s` for Shift-JIS, converted with **libiconv(3)**
+  `-e` for EUC-JP, `-s` for Shift-JIS, converted with **iconv(3)** — on
+  Windows, where there is no iconv(3), with the code page conversion of the
+  system itself
 - what the terminal can display is asked from the **locale**, not from an
-  environment variable of its own; `-u` overrules the answer
+  environment variable of its own; `-u` overrules the answer.  Windows has no
+  locale to ask, so there the answer comes from the **code page** of what the
+  dump is written to
 
 `u8hd` is a UTF-8 successor to [`jhd`](https://github.com/belgianbeer/jhd),
 a Japanese-aware hex dump utility first released in 1986.
@@ -69,11 +73,21 @@ $ u8hd sample
 | `-e` | the file is read as **EUC-JP** and converted to UTF-8 |
 | `-s` | the file is read as **Shift-JIS** and converted to UTF-8 |
 
--*libiconv(3)** does the conversion, and nothing is converted when both sides
+**iconv(3)** does the conversion, and nothing is converted when both sides
 are UTF-8 — no iconv descriptor is even opened for a UTF-8 file.  `-e` and
 `-s` cannot be used together: one byte of a file cannot belong to two code
 sets at once.  `-eu` and `-su` read EUC-JP and Shift-JIS and write UTF-8 no
 matter what the locale says.
+
+On Windows the same two jobs are done by the system: `MultiByteToWideChar()`
+and `WideCharToMultiByte()` convert between code pages, and the code page of
+the console says what the terminal shows.  A console that works in Shift-JIS,
+which is what a Japanese Windows starts with, is therefore given the
+characters in Shift-JIS, and a file or a pipe — where nothing decodes the
+bytes but the program that reads them afterwards — is given UTF-8.  `-u` asks
+for UTF-8 wherever the dump goes, which is what a console in code page 65001
+(`chcp 65001`) wants.  What the code page of the display has no room for is
+shown as a dot, as it is elsewhere.
 
 ## Options
 
@@ -87,7 +101,7 @@ u8hd [ -abcehOrsuvw ] [ <file> ] [ +start[k][-length[k]|-+end[k]] ]
 | `-b` | the data as octal bytes |
 | `-c` | the characters only, 64 bytes to a line |
 | `-e` | read the file as EUC-JP |
-| `-h` | show the help, which ends with the version |
+| `-h` | show the help, with the version and the home page |
 | `-o` | the data as octal words, big-endian |
 | `-r` | the data as octal words, little-endian |
 | `-s` | read the file as Shift-JIS |
@@ -156,7 +170,8 @@ with what `jhd` itself prints.
 
 ## Contents
 
-- `u8hd.c` — the program, ANSI C / POSIX, using libiconv
+- `u8hd.c` — the program, ANSI C / POSIX, using iconv(3) and, on Windows, the
+  code page conversion of the system
 - `u8hd.1` — the manual page in English, `u8hd_ja.1` — the same in Japanese
 - `Makefile` — build and install (`PREFIX`, `DESTDIR`, `JAMANSEC` overridable)
 - `t_u8hd.sh` — 44 regression checks in tap format
@@ -199,6 +214,20 @@ installation of the program itself, the English man pages, and the Japanese
 man pages. Simply running `make install` will not install the Japanese man pages.
 To install the Japanese man pages, you must run `make install-jman` separately.
 
+### Building u8hd.exe for Windows
+
+To compile on Windows, you only need the MinGW-w64 version of gcc; no other
+special libraries are required. Compilation is done as follows, without using
+make or Makefile.
+
+```bat
+gcc -O2 -static -s -o u8hd.exe u8hd.c
+```
+
+Specifying `-static` creates a standalone u8hd.exe binary (it still uses the
+system DLLs `KERNEL32.dll` and `msvcrt.dll`). `-s` removes the symbol table
+and debug information. Remove `-s` if you want to run it in a debugger.
+
 ## Portability
 
 - `t_u8hd.sh` is written for POSIX `sh`.  The bytes of its test data are built
@@ -217,6 +246,17 @@ To install the Japanese man pages, you must run `make install-jman` separately.
   where glibc and the C libraries of macOS and FreeBSD declare `char **`.  The
   address of the input pointer travels as a `void *`, which suits both, so the
   "incompatible pointer type" warning — an error with a recent GCC — is gone.
+- For converting display character codes in the Windows version,
+  `MultiByteToWideChar()` and `WideCharToMultiByte()` are used instead of
+  `iconv()`. For display, the console's code page is checked instead of the
+  locale. These are handled using `#ifdef _WIN32`.
+- Similarly, since `off_t` in the Windows C library is 32-bit,
+  `_FILE_OFFSET_BITS` is defined as 64 before the first include statement.
+- Because the newline character in standard Windows text is 2 bytes (CR LF),
+  binary mode is specified in fopen(). Standard input is also set to binary
+  mode. Output to files and pipes is also set to binary mode, and the output
+  is LF only, ensuring that the output is byte-wise the same as other systems.
+  Output to the console remains in text mode.
 
 ## Tested on
 
@@ -226,6 +266,7 @@ To install the Japanese man pages, you must run `make install-jman` separately.
 | Linux (Debian 13, Ubuntu 26.04) | `make`, `make check` and `make test` all pass |
 | FreeBSD 15.1 | `make`, `make check` and `make test` all pass |
 | NetBSD 9.4 | `make`, `make check` and `make test` all pass |
+| Windows 11 (gcc 15.2 of MinGW-w64) | `gcc -O2 -o u8hd.exe u8hd.c`; t_u8hd.sh passed 40 tests, excluding locale-related tests |
 
 ## Author
 
@@ -265,10 +306,18 @@ $ u8hd sample
 | `-e` | ファイルは **EUC-JP**。UTF-8 へ変換して表示 |
 | `-s` | ファイルは **Shift-JIS**。UTF-8 へ変換して表示 |
 
-- 変換には **libiconv(3)** を使います (UTF-8→UTF-8 では iconv を開きません)。
+- 変換には **iconv(3)** を使います (UTF-8→UTF-8 では iconv を開きません)。
+  Windows では iconv(3) の代替として、
+  **MultiByteToWideChar() / WideCharToMultiByte()** を使用します。
 - `-e` と `-s` は同時に使えません (エラーになります)。
 - `-eu` / `-su` とすると、対象は EUC-JP / Shift-JIS のまま、出力はロケールに関係なく UTF-8 です。
-- 端末の性質はロケールから決めます (jhd が参照していた環境変数 `TTYPE` は使いません)。
+- 端末への表示文字種はロケールから決めます (jhd が参照していた環境変数 `TTYPE` は使いません)。
+- Windows ではロケールの代替として、**出力先のコードページ**を使用します：
+  コンソールならそのコードページ (`GetConsoleOutputCP()`) で
+  表示し、ファイルやパイプなら UTF-8 にします。日本語版 Windows の既定の
+  コードページ (932) のコンソールなら Shift-JIS で、`chcp 65001` や
+  `-u` なら UTF-8 で表示します。コードページに収まらない文字は他の場合と
+  同じく `.` です。
 
 ## オプション
 
@@ -282,7 +331,7 @@ u8hd [ -abcehOrsuvw ] [ <file> ] [ +start[k][-length[k]|-+end[k]] ]
 | `-b` | 1 バイトずつ 8 進 |
 | `-c` | 文字のみ 1 行 64 バイト |
 | `-e` | ファイルを EUC-JP として読む |
-| `-h` | ヘルプを表示（最後に版を示す文字列） |
+| `-h` | ヘルプを表示（版を示す文字列とプログラムの URL） |
 | `-o` | 2 バイトずつ 8 進 (ビッグエンディアン) |
 | `-r` | 2 バイトずつ 8 進 (リトルエンディアン) |
 | `-s` | ファイルを Shift-JIS として読む |
@@ -350,7 +399,7 @@ ASCII のみのデータについては、jhd(1) を実際に走らせて、そ�
 
 ## 収録物
 
-- `u8hd.c` — ANSI C / POSIX、libiconv 利用
+- `u8hd.c` — ANSI C / POSIX。変換は iconv(3)、Windows ではシステムのコードページ
 - `u8hd.1` — 英語 man ページ
 - `u8hd_ja.1` — 日本語 man ページ
 - `Makefile` — ビルド / インストール (`PREFIX`, `DESTDIR`, `JAMANSEC` 可変)
@@ -407,6 +456,18 @@ Makefile を記述してあります。単に `make install`
 できます。日本語版の置き場所は `make JAMANSEC=ja_JP install-jman`
 のように変えられます。
 
+### Windows 版 u8hd.exe のビルド
+
+Windows でコンパイルするには、MinGW-w64 の gcc を用意すればよく、他の特別なライブラリ等は不要です。コンパイルは次のように行い、make 並びに Makefile は使いません。
+
+```bat
+gcc -O2 -static -s -o u8hd.exe u8hd.c
+```
+
+`-static` を指定することでバイナリを単体の `u8hd.exe` としています(システムの
+DLL である `KERNEL32.dll` と `msvcrt.dll` は使います)。
+`-s` でシンボル表とデバッグ情報を取り除きます。デバッガにかける場合は `-s` を外します。
+
 ## ポータビリティ
 
 - `t_u8hd.sh` は POSIX の `sh` で動くように書いてあります。テストデータの
@@ -426,15 +487,26 @@ Makefile を記述してあります。単に `make install`
   `void *` に変えて渡すようにしたので、`char **` の glibc・macOS・
   FreeBSD でも、`const char **` の NetBSD でも、警告なく通ります。
 - リンクは上に書いたとおり `-liconv` を付けない方を先に試します。
+- Windows 版での表示文字コードの変換などには、 `iconv()` の代わりに
+  `MultiByteToWideChar()` と `WideCharToMultiByte()`、を使っています。
+  表示についてはロケールの代わりにコンソールのコードページを確認します。
+  これらについては `#ifdef _WIN32` で切り分けています。
+- 同じく Windows の C ライブラリで `off_t` は 32 ビットなので、最初の
+  include より前に `_FILE_OFFSET_BITS` を 64 と定義しています。
+- Windows の標準テキストでは改行コードが CR LF の2バイトであるため、
+  `fopen ()` ではバイナリモードを指定しています。また標準入力もバイナリモードを設定しています。
+  ファイルやパイプへの出力もバイナリモードを設定し出力は LF のみとすることで、
+  他のシステムとバイト単位で同じ出力にします。コンソールへはそのままテキストモードです。
 
 ## 動作確認
 
 | システム | 結果 |
 | -------- | ---- |
-| macOS Tahoe (開発環境) | `make` / `make check` / `make test` (dash・bash・ksh) すべてパス |
+| macOS Golden Gate | `make` / `make check` / `make test` (dash・bash・ksh) すべてパス |
 | Linux (Debian 13、Ubuntu 26.04) | `make` / `make check` / `make test` すべてパス |
 | FreeBSD 15.1 | `make` / `make check` / `make test` すべてパス |
 | NetBSD 9.4 | `make` / `make check` / `make test` すべてパス |
+| Windows 11 (MinGW-w64 の gcc 15.2) | `gcc -O2 -o u8hd.exe u8hd.c`。t_u8hd.sh の ロケール関係を除く 40 検査をパス。 |
 
 ## ライセンス
 

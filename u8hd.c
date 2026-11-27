@@ -16,7 +16,13 @@
  *  carry them, falls back to plain ASCII.  -u asks for UTF-8 whatever the
  *  locale says.  -e and -s say that the bytes of the dumped file are
  *  EUC-JP or Shift-JIS rather than UTF-8: those characters are converted
- *  to UTF-8 for the display, with libiconv(3).
+ *  to the code set of the display for the character column to show.
+ *
+ *  A POSIX system has iconv(3) to convert with and nl_langinfo() to ask the
+ *  locale what it displays; Windows has neither in its C library, and says
+ *  the same two things in its own way, through the MultiByteToWideChar()
+ *  and WideCharToMultiByte() of the system and the code page the console it
+ *  writes to works in.  What follows from that is in setcodeset().
  */
 
 /*
@@ -60,12 +66,23 @@ static char rcsid[] =
 #define  NORETURN
 #endif
 
+/*
+ *  _FILE_OFFSET_BITS - the width of an address in the file
+ *
+ *  The C library of Windows keeps off_t 32 bits wide, which the address of
+ *  a dump line outgrows in a file of two GiB; asking for the 64 bit one
+ *  makes the type what it is on the 64 bit systems u8hd runs on, and with
+ *  it takes the 64 bit fseeko().  It has to be said before the first
+ *  include, for it is the headers that choose the type from it.
+ */
+#if  defined(_WIN32) && !defined(_FILE_OFFSET_BITS)
+#define  _FILE_OFFSET_BITS	64
+#endif
+
 #include  <sys/types.h>			/*  off_t, size_t  */
 #include  <ctype.h>
 #include  <errno.h>
-#include  <iconv.h>			/*  the conversion of -e and -s  */
 #include  <inttypes.h>			/*  intmax_t, strtoimax(), INTMAX_MAX  */
-#include  <langinfo.h>			/*  nl_langinfo(), CODESET  */
 #include  <locale.h>
 #include  <stdint.h>			/*  uint64_t  */
 #include  <stdio.h>
@@ -73,7 +90,23 @@ static char rcsid[] =
 #include  <string.h>
 #include  <unistd.h>			/*  isatty(), fileno(), STDIN_FILENO  */
 
-#define  BSIZE       65536		/*  input buffer size  */
+#ifdef  _WIN32
+/*
+ *  Windows has no iconv(3) to convert with and no nl_langinfo() to ask the
+ *  locale what it displays; the system answers both questions itself, in
+ *  the code page numbers that MultiByteToWideChar() and
+ *  WideCharToMultiByte() convert with and that GetConsoleOutputCP() says.
+ */
+#define  WIN32_LEAN_AND_MEAN
+#include  <windows.h>
+#include  <fcntl.h>			/*  _O_BINARY  */
+#include  <io.h>			/*  _fileno(), _setmode()  */
+#else
+#include  <iconv.h>			/*  the conversion of -e and -s  */
+#include  <langinfo.h>			/*  nl_langinfo(), CODESET  */
+#endif
+
+#define  BSIZE       16384		/*  input buffer size  */
 #define  DWIDTH         16		/*  a dump line, in all modes but -c  */
 #define  LWIDTH         64		/*  a dump line, in char mode  */
 #define  XWIDTH        128		/*  the widest line, the -c one with -w  */
@@ -88,13 +121,26 @@ static char rcsid[] =
 #define  OCTREV          4		/*  dump in octal reverse  */
 
 /*
- *  the code sets: Incode is the one the file is written in, the display
- *  is either UTF-8 (Mbflag set) or a column that cannot show more than
- *  the 7 bit ASCII (Mbflag clear).
+ *  the code sets: Incode is the one the file is written in, and the display
+ *  is either a code set that carries the characters (Mbflag set) -- UTF-8,
+ *  or on Windows the code page the console works in -- or a column that
+ *  cannot show more than the 7 bit ASCII (Mbflag clear).
  */
 #define  C_UTF8          1		/*  UTF-8  */
 #define  C_EUC           2		/*  EUC-JP  */
 #define  C_SJIS          3		/*  Shift-JIS  */
+
+#ifdef  _WIN32
+/*
+ *  The same three as the code page Windows converts with.  EUC-JP is 20932,
+ *  and Shift-JIS the CP932 that one of the names of -s already says; UTF-8
+ *  needs no number of our own, CP_UTF8 is it.  There is one code page for
+ *  every code set, because the byte ranges that charlen() recognises are
+ *  written into the source and do not come from the code page.
+ */
+#define  CP_EUC          20932		/*  EUC-JP  */
+#define  CP_SJIS         932		/*  Shift-JIS  */
+#endif
 
 static uint8_t	Buf[BSIZE];	/*  input buffer  */
 static uint8_t	Tbuf[XWIDTH];	/*  copy of the last dumped line  */
@@ -112,21 +158,30 @@ static int		Vflag;		/*  visual option  */
 static int		Wflag;		/*  the double width option  */
 static int		Putast;		/*  '*' display flag  */
 static int		Incode = C_UTF8;	/*  code set of the file  */
-static int		Mbflag;		/*  the display holds UTF-8  */
+static int		Mbflag;		/*  the display holds characters  */
 static uint8_t	Pend[MAXSEQ];	/*  head of a character cut by EOL  */
 static int		Pendlen;	/*  bytes kept, 0 when none  */
+#ifdef  _WIN32
+static unsigned int	Incp = CP_UTF8;	/*  the code page of the file  */
+static unsigned int	Outcp = CP_UTF8;	/*  the code page of the display  */
+#else
 static iconv_t		Cvt = (iconv_t)-1;	/*  Incode into UTF-8  */
+#endif
 
 /*
  *  function prototypes
  */
 static void		setcodeset(void);
 static void		openconv(void);
+static void		closeconv(void);
+static int		todisplay(uint8_t *out, int outsize,
+				    const uint8_t *p, int len);
 static int		charlen(const uint8_t *p, int avail);
 static int		utf8len(const uint8_t *p, int avail);
 static int		euclen(const uint8_t *p, int avail);
 static int		sjislen(const uint8_t *p, int avail);
 static int		utf8disp(const uint8_t *p, int len);
+static int		dispchar(unsigned long cp);
 static void		setpend(const uint8_t *p, int size);
 static void		putmb(const uint8_t *p, int len);
 static void		putspc(int n);
@@ -169,7 +224,7 @@ static off_t		linestart(off_t addr);
 static int		parseargs(int argc, char **argv);
 
 /*
- *  setcodeset - ask the locale what it is able to display
+ *  setcodeset - ask the system what it is able to display
  *
  *  The name of the code set is reduced to its letters and digits in lower
  *  case, so that "UTF-8", "utf8" and "UTF8" all read alike.  UTF-8 in the
@@ -178,10 +233,38 @@ static int		parseargs(int argc, char **argv);
  *  and leaves the column at ASCII.  jhd asked the TTYPE environment
  *  variable which kind of terminal was in front of it; u8hd asks setlocale
  *  instead, and -u can overrule the answer.
+ *
+ *  Windows has no nl_langinfo() to ask this of, and its C library reads the
+ *  environment of no LANG at all; it says the same thing in another way.
+ *  What it shows of the bytes a program writes follows the code page the
+ *  console works in, and nothing at all decodes them where a file or a pipe
+ *  is written to.  The code page of the console therefore decides there,
+ *  and Outcp keeps it for todisplay() to write the characters in that very
+ *  code page; a file or a pipe is left at UTF-8, which is what u8hd is
+ *  named for.  A code page of two or three bytes to a character -- the
+ *  Japanese, Chinese and Korean ones -- carries the characters as UTF-8
+ *  does, so the column holds them for it as well; a code page of one byte
+ *  to a character can hold neither, and leaves the column at ASCII, as the
+ *  C locale does.
  */
 static void
 setcodeset(void)
 {
+#ifdef  _WIN32
+	unsigned int	cp;
+	CPINFO		info;
+
+	cp = isatty(fileno(stdout)) ? (unsigned int)GetConsoleOutputCP()
+	    : (unsigned int)CP_UTF8;
+	Outcp = cp;
+	/*
+	 *  CP_UTF8 needs no asking, GetCPInfo() says how many bytes a
+	 *  character of the code page is made of, and a code page that is
+	 *  not in the system at all answers nothing.
+	 */
+	Mbflag = cp == (unsigned int)CP_UTF8
+	    || (GetCPInfo((UINT)cp, &info) != 0 && info.MaxCharSize > 1);
+#else
 	const char	*cs;
 	char		norm[32];
 	size_t		i;
@@ -198,20 +281,39 @@ setcodeset(void)
 	}
 	norm[j] = '\0';
 	Mbflag = strcmp(norm, "utf8") == 0;
+#endif
 }
 
 /*
  *  openconv - get the code set conversion the options ask for
  *
- *  The file is read in Incode and the character column is written in
- *  UTF-8, so the two have to be joined by a conversion unless the file
- *  already is UTF-8.  A locale that displays no UTF-8 and that -u has not
- *  overruled leaves the column at ASCII, where nothing has to be
- *  converted: a Kanji of the file would only become a pair of dots.
+ *  The file is read in Incode and the character column is written in the
+ *  code set of the display -- UTF-8, except on a Windows console that works
+ *  in one of the Kanji code sets --, so the two have to be joined by a
+ *  conversion unless the file already is in the code set of the display.  A
+ *  display that carries no characters leaves the column at ASCII, where
+ *  nothing has to be converted: a Kanji of the file would only become a pair
+ *  of dots.
+ *
+ *  On Windows there is nothing to open and no iconv(3) to open: Incp takes
+ *  the number of the code page Incode is written in, and todisplay()
+ *  converts with it character by character.  A code page that is not in the
+ *  system at all is met as a name that iconv(3) does not know: with
+ *  noconv().
  */
 static void
 openconv(void)
 {
+#ifdef  _WIN32
+	if (!Mbflag || Incode == C_UTF8) {
+		return;
+	}
+	Incp = Incode == C_EUC ? (unsigned int)CP_EUC
+	    : (unsigned int)CP_SJIS;
+	if (IsValidCodePage((UINT)Incp) == 0) {
+		noconv(Incode == C_EUC ? "EUC-JP" : "Shift-JIS");
+	}
+#else
 	static const char *const	eucs[] = {
 	    "EUC-JP", "EUCJP", "EUC", NULL
 	};
@@ -232,7 +334,24 @@ openconv(void)
 		}
 	}
 	noconv(names[0]);
+#endif
 	/*  NOTREACHED  */
+}
+
+/*
+ *  closeconv - let go of what openconv() got hold of
+ *
+ *  A code page is a number and nothing to let go of, so there is no work
+ *  for the C library of Windows here.
+ */
+static void
+closeconv(void)
+{
+#ifndef  _WIN32
+	if (Cvt != (iconv_t)-1) {
+		(void)iconv_close(Cvt);
+	}
+#endif
 }
 
 /*
@@ -395,6 +514,20 @@ utf8disp(const uint8_t *p, int len)
 	for (i = 1; i < len; ++i) {
 		cp = (cp << 6) | (unsigned long)(p[i] & 0x3F);
 	}
+	return dispchar(cp);
+}
+
+/*
+ *  dispchar - can a character of that number be drawn, or is it a control
+ *
+ *  The C0 and the C1 control set have no glyph of their own, and jhd gave
+ *  the bytes below 0x20 a dot as well.  What a code set makes of the rest
+ *  is its own affair: the conversion says with its own answer whether the
+ *  character has a place in it or not.
+ */
+static int
+dispchar(unsigned long cp)
+{
 	return !(cp < 0x20 || (cp >= 0x7F && cp <= 0x9F));
 }
 
@@ -412,40 +545,94 @@ setpend(const uint8_t *p, int size)
 }
 
 /*
- *  putmb - display one character of the file
+ *  todisplay - the bytes that show the character p stands for
  *
- *  UTF-8 travels straight to the terminal; a character of EUC-JP or of
- *  Shift-JIS is handed to iconv(3) first.  What cannot be read as a
- *  character, or that the conversion makes no sense of, becomes a dot, as
- *  jhd shows an unprintable byte.
+ *  The character is a byte string of Incode, and the display wants UTF-8 or,
+ *  on Windows, the code page Outcp says; out is where the answer goes, and
+ *  its room is outsize.  A character that the code page of the display has
+ *  no room for, or that no conversion makes sense of, has no answer: the
+ *  caller puts a dot where the character should stand.
+ *
+ *  iconv(3) joins the two code sets on a POSIX system, and UTF-8 is the
+ *  answer it gives there -- the character column of u8hd is UTF-8, as the
+ *  locale that displays it is.  Windows has no iconv(3) to ask, but every
+ *  code page it knows is reached through UTF-16, and the two calls that
+ *  walk that way do all that -e and -s ask of the conversion.
  */
-static void
-putmb(const uint8_t *p, int len)
+static int
+todisplay(uint8_t *out, int outsize, const uint8_t *p, int len)
 {
+#ifdef  _WIN32
+	wchar_t		wide[MAXSEQ];
+	int		wn;
+	int		n;
+	int		i;
+
+	if (Incp == Outcp) {
+		/*  the display reads the bytes of the file as they are  */
+		if (len > outsize
+		    || (Incp == (unsigned int)CP_UTF8 && !utf8disp(p, len))) {
+			return -1;
+		}
+		(void)memcpy(out, p, (size_t)len);
+		return len;
+	}
+	wn = MultiByteToWideChar((UINT)Incp, MB_ERR_INVALID_CHARS,
+	    (const char *)p, len, wide,
+	    (int)(sizeof(wide) / sizeof(wide[0])));
+	if (wn <= 0) {
+		return -1;		/*  no character of that code page  */
+	}
+	for (i = 0; i < wn; ++i) {
+		if (!dispchar((unsigned long)wide[i])) {
+			return -1;	/*  a control of the C0 or C1 set  */
+		}
+	}
+	n = WideCharToMultiByte((UINT)Outcp, 0, wide, wn, (char *)out, outsize,
+	    NULL, NULL);
+	if (n <= 0) {
+		return -1;
+	}
+	if (Outcp != (unsigned int)CP_UTF8) {
+		/*
+		 *  A character the code page has no room for comes back as
+		 *  its default, which is a single byte '?'.  The flag that
+		 *  says so is of no use here: WC_NO_BEST_FIT_CHARS refuses
+		 *  even a Kanji, whose mapping the Kanji code pages have
+		 *  never called standard.  But 0x3F is below the smallest
+		 *  trail byte a double byte code page allows, so a '?' in
+		 *  the answer can only be that default.
+		 */
+		for (i = 0; i < n; ++i) {
+			if (out[i] == '?') {
+				return -1;
+			}
+		}
+	}
+	return n;
+#else
 	char		inbuf[MAXSEQ];
-	char		outbuf[MAXUTF];
 	char		*inp;
 	char		*outp;
 	size_t		inleft;
 	size_t		outleft;
+	int		n;
 
-	if (len == 1 && (*p & 0x80) == 0) {
-		putchar(isprint(*p) ? *p : '.');	/*  ASCII needs nobody  */
-		return;
-	}
-	if (Incode == C_UTF8) {
-		if (utf8disp(p, len)) {
-			(void)fwrite((const char *)p, 1, (size_t)len, stdout);
-		} else {
-			putchar('.');
+	if (Incode == C_UTF8) {		/*  both sides of it are UTF-8  */
+		if (len > outsize || !utf8disp(p, len)) {
+			return -1;
 		}
-		return;
+		(void)memcpy(out, p, (size_t)len);
+		return len;
+	}
+	if (Cvt == (iconv_t)-1) {
+		return -1;		/*  an ASCII column converts nothing  */
 	}
 	(void)memcpy(inbuf, p, (size_t)len);
 	inp = inbuf;
 	inleft = (size_t)len;
-	outp = outbuf;
-	outleft = sizeof(outbuf);
+	outp = (char *)out;
+	outleft = (size_t)outsize;
 	/*  iconv() takes the input buffer as "char **" in glibc and in the
 	 *  C libraries of Mac OS X and FreeBSD, but as "const char **" on
 	 *  NetBSD, which keeps to the XSI text.  What the argument points
@@ -453,13 +640,42 @@ putmb(const uint8_t *p, int len)
 	 *  here as a void * and suits every one of those prototypes.
 	 */
 	(void)iconv(Cvt, NULL, NULL, &outp, &outleft);	/*  shift state  */
-	if (iconv(Cvt, (void *)&inp, &inleft, &outp, &outleft) == (size_t)-1 ||
-	    inleft != 0 || outp == outbuf ||
-	    !utf8disp((uint8_t *)outbuf, (int)(outp - outbuf))) {
+	if (iconv(Cvt, (void *)&inp, &inleft, &outp, &outleft) == (size_t)-1
+	    || inleft != 0 || outp == (char *)out) {
+		return -1;
+	}
+	n = (int)(outp - (char *)out);
+	if (!utf8disp((uint8_t *)out, n)) {
+		return -1;
+	}
+	return n;
+#endif
+}
+
+/*
+ *  putmb - display one character of the file
+ *
+ *  The bytes travel to the terminal through todisplay(); ASCII needs no
+ *  conversion of any kind.  What cannot be read as a character, or that the
+ *  conversion makes no sense of, becomes a dot, as jhd shows an unprintable
+ *  byte.
+ */
+static void
+putmb(const uint8_t *p, int len)
+{
+	uint8_t		out[MAXUTF];
+	int		n;
+
+	if (len == 1 && (*p & 0x80) == 0) {
+		putchar(isprint(*p) ? *p : '.');	/*  ASCII needs nobody  */
+		return;
+	}
+	n = todisplay(out, (int)sizeof(out), p, len);
+	if (n <= 0) {
 		putchar('.');
 		return;
 	}
-	(void)fwrite(outbuf, 1, (size_t)(outp - outbuf), stdout);
+	(void)fwrite((const char *)out, 1, (size_t)n, stdout);
 }
 
 /*
@@ -592,7 +808,7 @@ dmpmb(const uint8_t *base, int size)
 }
 
 /*
- *  dmpascii - the character column of a locale that shows no UTF-8
+ *  dmpascii - the character column of a display that carries no characters
  */
 static void
 dmpascii(const uint8_t *base, int size)
@@ -606,7 +822,7 @@ dmpascii(const uint8_t *base, int size)
 }
 
 /*
- *  dmptext - dump the character column the locale can show
+ *  dmptext - dump the character column the display can show
  */
 static void
 dmptext(const uint8_t *base, int size)
@@ -923,6 +1139,17 @@ setname(const char *path)
 	while ((pt = strchr(path, '/')) != NULL) {
 		path = pt + 1;
 	}
+#ifdef  _WIN32
+	/*
+	 *  A command line of Windows carries the whole path of the program in
+	 *  front of its name, and with a backslash between them, which the
+	 *  loop above knows nothing of.  The name alone is what the usage and
+	 *  the error messages are to begin with there as well.
+	 */
+	while ((pt = strchr(path, '\\')) != NULL) {
+		path = pt + 1;
+	}
+#endif
 	return path;
 }
 
@@ -989,6 +1216,9 @@ setoption(int opt)
 
 	case 'u':
 		Mbflag = 1;		/*  UTF-8 whatever the locale says  */
+#ifdef  _WIN32
+		Outcp = (unsigned int)CP_UTF8;	/*  and so the bytes of it  */
+#endif
 		break;
 
 	case 'h':
@@ -1055,15 +1285,19 @@ usage(void)
 }
 
 /*
- *  helput - answer -h: the usage, a line about every option, the
- *  numbers an offset takes, and the id
+ *  helput - answer -h:  the usage, a line about every option, the
+ *  numbers an offset takes, the id, and, last of all, the page the
+ *  program lives on
  *
  *  What every option does is what the English part of the README says
  *  about it, in short.  The line about the numbers stands for the [k] of
  *  the synopsis, which is left out of the usage to keep it to a line.
- *  The last line is the id string that CVS expands, taken from its fifth
- *  byte so that the "@(#)" of it stays out of the display; it stands for
- *  the version, which needs no separate option.
+ *  The id string is what CVS expands, taken from its fifth byte so that
+ *  the "@(#)" of it stays out of the display; it stands for the version,
+ *  which needs no separate option.  The address of the page the program
+ *  lives on comes behind it, and is indented with a tab of its own so
+ *  that it stands apart from the lines of the options, which puttabstrlf
+ *  has already moved aside.
  */
 #define puttabstrlf(s)	{putchar('\t'); fputs(s, stdout); putchar('\n');}
 
@@ -1090,14 +1324,15 @@ helput(void)
 	for (i = 0; i < sizeof(line) / sizeof(line[0]); ++i) {
 		puttabstrlf(line[i]);
 	}
-	puttabstrlf("number:  x or 0x for hexdecimal, o for octal,"
+	puttabstrlf("number:  x or 0x for hexdecimal, o or 0 for octal,"
 	    " k times 1024");		/*  what +start, -length and -+end take  */
 	puttabstrlf(rcsid + 4);			/*  4:  past the "@(#)"  */
+	puttabstrlf("\tSee, https://github.com/belgianbeer/u8hd");
 	exit(EXIT_SUCCESS);
 }
 
 /*
- *  noconv - libiconv(3) cannot join the code set of the file to UTF-8
+ *  noconv - the code set of the file cannot join the one of the display
  */
 static NORETURN void
 noconv(const char *name)
@@ -1105,7 +1340,12 @@ noconv(const char *name)
 	fputs(Prgnam, stderr);
 	fputs(": ", stderr);
 	fputs(name, stderr);
+#ifdef  _WIN32
+	fputs(" cannot be converted to the code set of the display.\n",
+	    stderr);
+#else
 	fputs(" to UTF-8: iconv cannot convert.\n", stderr);
+#endif
 	exit(EXIT_FAILURE);
 }
 
@@ -1335,7 +1575,29 @@ main(int argc, char **argv)
 	int	file;
 
 	Prgnam = setname(argv[0]);
+#ifdef  _WIN32
+	/*
+	 *  What the system can display is asked from the system itself in
+	 *  setcodeset(), so the C library is left at the C locale it starts
+	 *  in: that keeps isprint() to the seven bit ASCII which the column
+	 *  of a display that carries no characters shows.
+	 *
+	 *  Text mode is of no use for a dump, either: it makes one byte of
+	 *  the two that stand for a line of a file, which would move every
+	 *  address that follows them.  The standard input is therefore taken
+	 *  as binary here, and the files fopen() opens below are told to be.
+	 *  Where the display is a file or a pipe, it is taken as binary as
+	 *  well, so that a dumped line ends with the one line feed every
+	 *  other system writes; a console is left in text mode, which is the
+	 *  line end it wants.
+	 */
+	(void)_setmode(_fileno(stdin), _O_BINARY);
+	if (!isatty(fileno(stdout))) {
+		(void)_setmode(_fileno(stdout), _O_BINARY);
+	}
+#else
 	(void)setlocale(LC_CTYPE, "");	/*  ask the locale before anything  */
+#endif
 	setcodeset();
 	file = parseargs(argc, argv);
 	openconv();
@@ -1345,7 +1607,7 @@ main(int argc, char **argv)
 		dmpmain();
 		goto done;
 	}
-	Fp = fopen(argv[file], "r");
+	Fp = fopen(argv[file], "rb");	/*  the bytes of the file, as they are  */
 	if (Fp == NULL) {
 		no_open(argv[file]);
 	}
@@ -1360,8 +1622,6 @@ main(int argc, char **argv)
 	dmpmain();
 	fclose(Fp);
 done:
-	if (Cvt != (iconv_t)-1) {
-		(void)iconv_close(Cvt);
-	}
+	closeconv();
 	return 0;
 }
