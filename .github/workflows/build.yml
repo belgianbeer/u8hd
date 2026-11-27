@@ -32,7 +32,7 @@ jobs:
       matrix:
         os: [ubuntu-latest, macos-latest]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: the syntax check
         run: make check
       - name: the build
@@ -51,14 +51,23 @@ jobs:
     name: windows (u8hd.exe)
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: the gcc of MinGW-w64
         uses: msys2/setup-msys2@v2
         with:
           msystem: MINGW64
           update: true
-          install: mingw-w64-x86_64-gcc
+          #  diffutils is here for cmp, which is what the checks of the dump
+          #  compare with.  The MSYS2 of the runner carries coreutils, sed
+          #  and grep, but not cmp: without it every check says not ok while
+          #  the expected and the got lines agree with one another.
+          install: mingw-w64-x86_64-gcc diffutils
+          #  MINGW64 rather than UCRT64, because the build links the
+          #  C runtime static and the ucrt of Windows is a system dll
+          #  that cannot be taken into the image; this says so to the
+          #  setup action, which stops the warning of the same name
+          suppress-deprecation-warnings: msystem-mingw64
 
       - name: the syntax check, which is make check elsewhere
         shell: msys2 {0}
@@ -78,6 +87,11 @@ jobs:
         shell: msys2 {0}
         run: |
           set -e
+          #  name the tool that is missing at once, instead of letting every
+          #  check fail over a cmp that is not there to be found
+          for tool in cmp grep head sed tr; do
+            command -v "$tool" > /dev/null || { echo "# $tool is missing"; exit 1; }
+          done
           U8HD=./u8hd.exe
           #  a path the program of Windows opens has to be one it can find on
           #  its own, and an MSYS path of its own it cannot: stay relative
@@ -239,7 +253,7 @@ jobs:
           cp u8hd.exe "$name"
           ls -l "$name"
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: u8hd-windows-x86_64
           path: u8hd-*-windows-x86_64.exe
@@ -260,7 +274,7 @@ jobs:
       contents: write
     steps:
       - name: the binaries the builds made
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           pattern: u8hd-*
           path: dist
