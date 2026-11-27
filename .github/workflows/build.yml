@@ -246,24 +246,26 @@ jobs:
       - name: the binary of this run
         shell: msys2 {0}
         run: |
-          case "$GITHUB_REF_NAME" in
-            v*) name="u8hd-$GITHUB_REF_NAME-windows-x86_64.exe" ;;
-            *)  name="u8hd-snapshot-windows-x86_64.exe" ;;
-          esac
-          cp u8hd.exe "$name"
-          ls -l "$name"
+          ls -l u8hd.exe LICENSE
 
+      #  LICENSE travels with the program: the second condition of that
+      #  license asks a distribution of the binary to carry the notice, and
+      #  the zip the release job makes of the two has room for both
       - uses: actions/upload-artifact@v7
         with:
           name: u8hd-windows-x86_64
-          path: u8hd-*-windows-x86_64.exe
+          path: |
+            u8hd.exe
+            LICENSE
           if-no-files-found: error
 
   #
   #  A tag is what asks for this: the u8hd.exe of the windows job joins the
-  #  release of the tag, where GitHub keeps the source of it as a zip and a
-  #  tarball of its own accord.  The job waits for the tests of the other
-  #  systems, so that a release is only made of a version that passes them.
+  #  release of the tag in a zip of its own, which is what one unpacks to get
+  #  at the program -- GitHub keeps the source of the tag as a zip and a
+  #  tarball of its own accord beside it.  The job waits for the tests of the
+  #  other systems, so that a release is only made of a version that passes
+  #  them.
   #
   release:
     name: the release of a tag
@@ -280,10 +282,16 @@ jobs:
           path: dist
           merge-multiple: true
 
+      - name: the zip of the binary
+        run: |
+          name="u8hd-$GITHUB_REF_NAME-windows-x86_64.zip"
+          zip -9 -j "$name" dist/u8hd.exe dist/LICENSE
+          unzip -l "$name"
+
       - name: the files of the release
         uses: softprops/action-gh-release@v2
         with:
-          files: dist/*
+          files: u8hd-*-windows-x86_64.zip
           generate_release_notes: true
 
 
